@@ -1,0 +1,12 @@
+JishuDB (jishudb)
+Copyright 2026 The JishuDB Authors
+
+This repository distributes Skill packages from JishuDB:
+https://github.com/x-aijishu/jishudb
+
+The imported packages are licensed under the Apache License, Version 2.0.
+See LICENSE.
+
+The JishuDB service, Desktop application, models, and third-party runtime
+binaries are not included. Notices for those components accompany their
+respective upstream distributions.
