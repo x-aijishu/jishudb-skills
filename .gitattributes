@@ -1,0 +1,4 @@
+# Preserve checksum-bound MCP fixtures across platforms.
+skills/jishudb-mcp-check/assets/canary.md text eol=lf
+skills/jishudb-mcp-check/assets/canary.txt text eol=lf
+skills/jishudb-mcp-check/assets/canary.pdf binary
