@@ -1,10 +1,12 @@
 ---
 name: industry-opportunity-radar
 description: >-
-  Track industry evidence over time and deliver change briefings, comparable
-  indicators, opportunity hypotheses, risks, and open questions. Use to understand
-  what changed in reports rather than receive another title list. JishuDB retains
-  the baseline and history; recurrence needs separately authorized host scheduling.
+  跟踪行业变化、对比本次与历史研报证据，适用于行业动态简报、指标变化、
+  机会假设与风险观察；首次运行建立基线，定期执行需单独授权调度。 /
+  Track industry changes against evidence snapshots saved in JishuDB. Deliver
+  comparable indicators, change briefings, opportunity hypotheses, and risks.
+  The first run establishes a baseline; recurring runs require separately
+  authorized host scheduling.
 compatibility: >-
   WorkBuddy or another Agent Skills-compatible host with JishuDB MCP, authorized
   public research, and approved text/CSV output. Image evidence needs OCR/vision;
@@ -12,6 +14,8 @@ compatibility: >-
 metadata:
   author: jishudb
   version: "0.1.0"
+  openclaw:
+    homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/industry-opportunity-radar
 ---
 
 # Industry Opportunity Radar
@@ -19,6 +23,18 @@ metadata:
 Compare saved evidence, not publication headlines. JishuDB is the required
 historical backend. The first run establishes a baseline, not fabricated trends.
 Read the packaged [evidence contract](references/evidence-contract.md).
+
+## Use this skill when
+
+- The user wants to know what changed since an earlier industry evidence snapshot.
+- New reports need comparison with saved market indicators or competitor evidence.
+- The user wants an initial baseline for later industry monitoring.
+- The user needs evidence-backed opportunity hypotheses, risks, and open questions.
+
+Do not use this skill for a standalone statistic lookup; use
+`data-evidence-finder`. Use `research-report-hunter` for report discovery alone,
+or `industry-report-sprint` for a one-off written sector analysis without a
+monitoring objective. Do not imply recurrence without an authorized scheduler.
 
 ## Start and authorize
 

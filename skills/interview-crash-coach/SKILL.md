@@ -1,11 +1,12 @@
 ---
 name: interview-crash-coach
 description: >-
-  Prepare for an interview from just a company and role: public company research,
-  role knowledge, targeted questions, hypothetical answer frameworks, and an
-  interactive mock interview with feedback. No resume upload is required.
-  JishuDB retains the preparation pack; personal practice is saved only with
-  explicit separate approval.
+  根据公司和岗位快速准备面试，适用于公司调研、岗位知识、面试题练习、
+  回答框架和逐题模拟面试反馈，无需上传简历；保存个人练习需另行同意。 /
+  Prepare for a company-and-role interview with public research, role knowledge,
+  practice questions, hypothetical answer frameworks, and interactive mock
+  feedback. No resume is required. JishuDB retains the preparation pack;
+  saving personal practice requires separate explicit approval.
 compatibility: >-
   WorkBuddy or another Agent Skills-compatible host with JishuDB MCP, permitted
   public browsing, conversational practice, and approved local text output.
@@ -13,6 +14,8 @@ compatibility: >-
 metadata:
   author: jishudb
   version: "0.1.0"
+  openclaw:
+    homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/interview-crash-coach
 ---
 
 # Interview Crash Coach
@@ -20,6 +23,18 @@ metadata:
 Start useful preparation without a resume. JishuDB is required for public
 research and the preparation pack; saving personal answers or feedback is
 optional and requires explicit approval separate from that general write scope.
+
+## Use this skill when
+
+- The user has a company and role and needs a focused interview preparation pack.
+- The user wants public company research and a role-specific knowledge checklist.
+- The user needs practice questions and truthful, hypothetical answer frameworks.
+- The user requests one-question-at-a-time mock practice with feedback.
+
+Do not use this skill to invent work experience, obtain private interview
+questions, or guarantee hiring outcomes. For standalone industry research
+without an interview objective, use `industry-report-sprint`. Preparation
+approval does not authorize retention of personal answers or feedback.
 
 ## Start and authorize
 

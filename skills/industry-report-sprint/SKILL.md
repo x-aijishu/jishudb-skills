@@ -1,10 +1,12 @@
 ---
 name: industry-report-sprint
 description: >-
-  Research a sector and produce a source-cited industry report covering the
-  market landscape, representative products, competitive differences, and
-  information gaps. Use for a fast decision brief without requiring uploaded
-  reports. JishuDB preserves evidence, comparisons, report text, and updates.
+  从行业名称快速完成带引用的行业研究报告，适用于市场分析、竞争格局、
+  代表产品对比、进入壁垒和决策简报，无需先上传研报。 /
+  Research a sector and write a source-cited industry report covering market
+  structure, representative products, competitive differences, barriers, and
+  information gaps. Use for a written decision brief rather than a report
+  reading list or slide deck; retain evidence and report revisions in JishuDB.
 compatibility: >-
   WorkBuddy or another Agent Skills-compatible host with JishuDB MCP, public or
   authorized browsing/search, and approved local text output. OCR or vision is
@@ -12,6 +14,8 @@ compatibility: >-
 metadata:
   author: jishudb
   version: "0.1.0"
+  openclaw:
+    homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/industry-report-sprint
 ---
 
 # Industry Report Sprint
@@ -19,6 +23,18 @@ metadata:
 Produce a usable research report, not just a reading list. JishuDB is the
 required persistence backend. Read this package's
 [evidence contract](references/evidence-contract.md) before acquiring sources.
+
+## Use this skill when
+
+- The user wants a complete written industry report from a sector name.
+- A decision brief needs market structure, demand, barriers, and evidence gaps.
+- Representative products or competitors need a source-cited comparison matrix.
+- The user needs research and synthesis without first uploading a report pack.
+
+Do not use this skill when the only deliverable is a list of reports to read;
+use `research-report-hunter`. Use `data-evidence-finder` for individual claims,
+`end-to-end-industry-presentations` for an industry `.pptx`, or
+`industry-opportunity-radar` for monitoring changes against saved snapshots.
 
 ## Start and authorize
 

@@ -1,10 +1,12 @@
 ---
 name: polished-website-builder
 description: >-
-  Turn a product or service description into a polished, working, editable local
-  website with researched copy and responsive design. Use for landing pages,
-  product demos, and small showcase sites, not design advice alone. JishuDB
-  preserves product facts, design decisions, page copy, and revisions.
+  根据产品或服务介绍制作可本地打开、可编辑的响应式网站，适用于落地页、
+  产品演示页和小型展示站；交付实际网页文件，不只是设计建议，不含部署。 /
+  Build a working, editable local website from a product or service description,
+  including landing pages, product demos, and responsive showcase sites.
+  Deliver actual site files with researched copy; retain facts and revisions
+  in JishuDB. Deployment and backend services are out of scope.
 compatibility: >-
   WorkBuddy or another Agent Skills-compatible host with JishuDB MCP, permitted
   web access, approved local file editing, and website preview or inspection
@@ -12,6 +14,8 @@ compatibility: >-
 metadata:
   author: jishudb
   version: "0.1.0"
+  openclaw:
+    homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/polished-website-builder
 ---
 
 # Polished Website Builder
@@ -19,6 +23,18 @@ metadata:
 Produce working website files that the user can open and edit. JishuDB is the
 required knowledge and revision backend, not the website's form backend.
 Deployment, domain registration, and paid hosting are outside this workflow.
+
+## Use this skill when
+
+- The user wants a local landing page from a product or service description.
+- A product demo or small showcase site needs researched copy and responsive layout.
+- The user needs editable HTML/CSS and actual local assets rather than a mockup.
+- The user wants a site they can open and edit without a required hosting account.
+
+Do not use this skill for deployment, domain registration, payments, a production
+form backend, or unrelated application maintenance. For a presentation rather
+than a website, use `ppt-rescue-kit`. JishuDB stores research and revisions,
+not visitor submissions.
 
 ## Start and authorize
 

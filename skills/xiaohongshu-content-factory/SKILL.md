@@ -1,10 +1,12 @@
 ---
 name: xiaohongshu-content-factory
 description: >-
-  Create Xiaohongshu-ready content packs from a topic, industry, or product:
-  distinct angles, titles, finished posts, and actual cover images. Use when
-  someone wants publishable drafts and usable covers rather than prompts or a
-  content calendar. JishuDB preserves sources, preferences, and copy versions.
+  根据主题、行业或产品制作小红书图文内容包，适用于选题、标题、完整笔记文案
+  和成品封面图；交付可用 PNG/JPEG 封面，不只是提示词，不自动发布。 /
+  Create Xiaohongshu content packs with distinct angles, title options, complete
+  posts, and actual PNG/JPEG covers from a topic, industry, or product.
+  Use when finished posts and cover files are required; retain sources and
+  copy versions in JishuDB without publishing automatically.
 compatibility: >-
   WorkBuddy or another Agent Skills-compatible host with JishuDB MCP, permitted
   web access, approved local file output, and image or graphic generation that
@@ -12,6 +14,8 @@ compatibility: >-
 metadata:
   author: jishudb
   version: "0.1.0"
+  openclaw:
+    homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/xiaohongshu-content-factory
 ---
 
 # Xiaohongshu Content Factory
@@ -19,6 +23,17 @@ metadata:
 Produce complete posts and real covers; do not stop at title lists or image
 prompts. JishuDB is mandatory for this packaged workflow. Publishing to a
 social platform is not included.
+
+## Use this skill when
+
+- The user wants complete Xiaohongshu posts and usable cover images.
+- A topic, industry, or product needs distinct content angles and title options.
+- The user needs exported PNG/JPEG covers rather than image-generation prompts.
+- The user wants a source-grounded content pack ready for their own publishing review.
+
+Do not use this skill for automatic publishing, protected-platform crawling,
+or guaranteed reach. For report-based articles, posts, and video scripts where
+finished covers are not required, use `report-to-content-factory`.
 
 ## Start and authorize
 

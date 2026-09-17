@@ -1,10 +1,12 @@
 ---
 name: end-to-end-industry-presentations
 description: >-
-  Find industry reports, select defensible data, and generate an editable
-  PowerPoint presentation with slide copy, chart data, citations, and a source
-  appendix. Use for evidence-led industry briefings from a topic and optional
-  audience. JishuDB retains reports, evidence cards, slide mappings, and revisions.
+  从行业主题出发查研报、核对数据并制作可编辑行业分析 PPT，适用于市场规模、
+  竞争格局和管理层行业汇报；包含图表数据、讲稿和逐页来源。 /
+  Research industry reports and verified data to generate an editable PowerPoint
+  briefing on market size, demand, and competition, with chart data, speaker
+  notes, and slide-to-source mappings retained in JishuDB. Use for
+  evidence-led industry decks, not general work-update presentations.
 compatibility: >-
   WorkBuddy or another Agent Skills-compatible host with JishuDB MCP, authorized
   web research, approved local file output, and editable PowerPoint generation.
@@ -12,6 +14,8 @@ compatibility: >-
 metadata:
   author: jishudb
   version: "0.1.0"
+  openclaw:
+    homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/end-to-end-industry-presentations
 ---
 
 # End-to-End Industry Presentations
@@ -19,6 +23,18 @@ metadata:
 Deliver a report-grounded editable `.pptx`, not a report list or slide outline.
 JishuDB is required for persistence, not a presentation generator. Read the
 packaged [evidence contract](references/evidence-contract.md) before discovery.
+
+## Use this skill when
+
+- The user wants an industry-analysis deck starting from a sector or market topic.
+- The presentation requires discovering reports and verifying their numerical evidence.
+- Management needs editable market-size, demand, or competitor-comparison charts.
+- The user needs an editable `.pptx` with chart data and traceable slide citations.
+
+Do not use this skill for general work updates, proposals, or deck rescue
+without an industry-research focus; use `ppt-rescue-kit`. Use
+`industry-report-sprint` for a written report, or `research-report-hunter`
+for a reading list without deck generation.
 
 ## Start and authorize
 

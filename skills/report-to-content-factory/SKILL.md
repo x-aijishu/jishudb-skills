@@ -1,10 +1,12 @@
 ---
 name: report-to-content-factory
 description: >-
-  Turn industry-report evidence into original WeChat articles, Xiaohongshu post
-  drafts, and short-video scripts with fresh angles, visual suggestions, and
-  citations. Use to translate specialist research into finished content drafts,
-  not merely summarize reports. JishuDB retains evidence, copy versions, and usage.
+  把行业研报和数据转化为原创公众号文章、小红书文案和短视频口播脚本，
+  适用于研报内容改编、多平台选题及有引用的内容成稿；提供配图建议，不保证成品封面。 /
+  Turn industry-report evidence into original WeChat articles, Xiaohongshu posts,
+  and short-video scripts with fresh angles, visual suggestions, and citations.
+  Deliver complete drafts, not report summaries or finished cover images;
+  retain evidence and copy revisions in JishuDB.
 compatibility: >-
   WorkBuddy or another Agent Skills-compatible host with JishuDB MCP, public or
   authorized browsing/search, and approved local text output. Image evidence
@@ -12,6 +14,8 @@ compatibility: >-
 metadata:
   author: jishudb
   version: "0.1.0"
+  openclaw:
+    homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/report-to-content-factory
 ---
 
 # Report-to-Content Factory
@@ -20,6 +24,19 @@ Deliver actual article and script drafts grounded in research, with visual
 suggestions and traceable claims. Unlike a cover-production workflow, this
 Skill does not require finished cover images. JishuDB is required. Read the
 packaged [evidence contract](references/evidence-contract.md) before discovery.
+
+## Use this skill when
+
+- The user wants original audience-facing content grounded in industry research.
+- A topic or report needs adaptation into a WeChat article, post, or spoken-video script.
+- The user needs complete multi-platform drafts with traceable claims and title options.
+- The user wants evidence-backed angles and visual suggestions, not just a summary.
+
+Do not use this skill alone when finished Xiaohongshu covers are required;
+use `xiaohongshu-content-factory` for that part without dropping requested
+article or script deliverables. Use
+`industry-report-sprint` for an analytical report, or `research-report-hunter`
+for a reading list. This workflow does not publish posts or produce finished videos.
 
 ## Start and authorize
 

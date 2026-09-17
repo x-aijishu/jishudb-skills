@@ -1,10 +1,12 @@
 ---
 name: research-report-hunter
 description: >-
-  Find relevant industry reports for a topic and deliver a prioritized reading
-  list with key points, publishers, dates, links, and honest availability of
-  summaries and full reports. Use to discover what is worth reading without an
-  upload pack. JishuDB retains the report catalog, summaries, and revisions.
+  查找行业研报、市场报告和白皮书，适用于“有哪些报告值得读”“找近期研报”
+  “有没有全文或 PDF”；交付阅读清单、要点、日期和链接，如实标注访问范围。 /
+  Discover and prioritize industry reports, market studies, and white papers.
+  Deliver a reading list with inspected key points, publishers, dates, links,
+  and honest summary/full-report availability, retained in JishuDB; not a newly
+  written industry report or a promise of free PDFs.
 compatibility: >-
   WorkBuddy or another Agent Skills-compatible host with JishuDB MCP, public or
   authorized browsing/search, and approved local text output. Image findings
@@ -12,6 +14,8 @@ compatibility: >-
 metadata:
   author: jishudb
   version: "0.1.0"
+  openclaw:
+    homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/research-report-hunter
 ---
 
 # Research Report Hunter
@@ -19,6 +23,18 @@ metadata:
 Deliver a useful report reading list, not an unsupported claim that every PDF
 was found or read. JishuDB is required. Read this package's
 [evidence contract](references/evidence-contract.md) before discovery.
+
+## Use this skill when
+
+- The user wants relevant reports or white papers to read about an industry.
+- The user asks for recent publications, publishers, dates, and verified links.
+- A reading list needs prioritization and key points from actually inspected material.
+- The user wants to know whether summaries or full reports are accessible.
+
+Do not use this skill to promise unrestricted PDFs or bypass access controls.
+Use `industry-report-sprint` to write a new industry report,
+`data-evidence-finder` to verify particular numbers, or `jishudb-search` when
+the request is limited to documents already stored in the knowledge base.
 
 ## Start and authorize
 
