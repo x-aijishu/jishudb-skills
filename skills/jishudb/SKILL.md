@@ -1,16 +1,41 @@
 ---
 name: jishudb
-description: 在本机或远程环境中安装、定位、连接或排查 JishuDB，并选择正确的 MCP 传输方式。适用于设置 JishuDB、连接 Agent、修复 MCP 连接或让当前 Agent 使用 JishuDB；不用于完整的 MCP 验收测试。
+description: >-
+  安装或连接 JishuDB，适用于首次设置、找不到服务、配置 Agent MCP、
+  连接失败、OAuth 或 Token 授权，以及选择本机或远程连接方式。
+  不用于知识库问答或完整 MCP 验收。 /
+  Install, locate, connect, or troubleshoot JishuDB for an agent, including
+  Desktop setup, service discovery, MCP transport, connection failures, and
+  OAuth or Token authorization. Reuse a working service and verify the actual
+  client connection; not for knowledge search or full MCP acceptance.
+compatibility: >-
+  Automatic Desktop installation requires local shell and network access in a
+  supported macOS arm64 or Windows x64 user session. Windows also requires
+  Node.js 22 or later. A remote or sandboxed agent cannot install software on
+  the user's local machine.
 metadata:
   author: jishudb
   version: "0.1.8"
-  compatibility: 自动安装桌面版需要本地 shell、网络访问以及受支持的 macOS arm64 或 Windows x64 用户会话；Windows 还需要 Node.js 22 或更高版本。远程或沙箱中的 Agent 无法安装用户本机软件。
+  openclaw:
+    homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/jishudb
 ---
 
 # JishuDB setup
 
 Install or connect the smallest safe JishuDB path for the user's actual
 machine and client. Keep Desktop as the sole owner of Desktop data.
+
+## Use this skill when
+
+- The user wants to install JishuDB or connect an agent for the first time.
+- An existing Desktop or remote service cannot be located or reached.
+- The user needs to choose HTTP versus stdio or configure MCP authorization.
+- A client fails to connect, or another workflow needs JishuDB setup repaired.
+
+Do not use this skill for ordinary document questions; use `jishudb-search`.
+For an explicitly requested smoke test or all-tools acceptance report on a
+configured connector, use `jishudb-mcp-check`. Connection repair alone does not
+authorize an acceptance run.
 
 ## Choose the route
 

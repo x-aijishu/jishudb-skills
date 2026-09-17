@@ -1,10 +1,12 @@
 ---
 name: ppt-rescue-kit
 description: >-
-  Turn a topic into an editable PowerPoint presentation with researched sources,
-  slide copy, speaker notes, and a source appendix. Use for work updates,
-  proposals, knowledge sharing, or rescuing an unfinished deck without requiring
-  an uploaded document pack. JishuDB preserves the sources and revisions.
+  快速制作或补完可编辑 PPT，适用于工作汇报、项目提案、知识分享、
+  只有主题或尚未完成的演示稿；交付逐页文案、讲稿和引用，不只是大纲。 /
+  Create or rescue an editable PowerPoint for work updates, proposals, or
+  knowledge sharing from a topic or unfinished deck. Deliver slide copy,
+  speaker notes, and sources retained in JishuDB. For report-led industry
+  analysis decks, use end-to-end-industry-presentations instead.
 compatibility: >-
   WorkBuddy or another Agent Skills-compatible host with JishuDB MCP, permitted
   web access, approved local file output, and editable PowerPoint generation.
@@ -12,6 +14,8 @@ compatibility: >-
 metadata:
   author: jishudb
   version: "0.1.0"
+  openclaw:
+    homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/ppt-rescue-kit
 ---
 
 # PPT Rescue Kit
@@ -19,6 +23,18 @@ metadata:
 Deliver an actual editable `.pptx`, not an outline presented as a finished
 presentation. JishuDB is the required persistence backend; presentation
 generation is a separate host capability.
+
+## Use this skill when
+
+- The user needs an editable presentation for a work update, proposal, or talk.
+- A topic needs a complete deck even though no document pack has been uploaded.
+- An unfinished deck needs a coherent narrative, complete slide copy, and notes.
+- The user expects an actual `.pptx` with sources, not only a slide outline.
+
+Do not use this skill as the default for an industry-analysis deck requiring
+report discovery, verified market data, and source-mapped charts; use
+`end-to-end-industry-presentations`. Use `polished-website-builder` when the
+requested deliverable is a working website rather than slides.
 
 ## Start and authorize
 

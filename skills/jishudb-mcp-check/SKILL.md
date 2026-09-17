@@ -1,10 +1,19 @@
 ---
 name: jishudb-mcp-check
-description: Manually validates a running JishuDB MCP connector through the host agent, covering read-only smoke checks or an isolated all-tools acceptance run with fixtures, safety checks, cleanup, and a Markdown report. Use when a user asks to test, verify, diagnose, or accept JishuDB MCP in WorkBuddy or another Agent Skills-compatible client.
+description: >-
+  按用户明确要求测试已配置的 JishuDB MCP，适用于只读冒烟测试、工具能力核对、
+  全工具验收和验收报告；全工具模式需另行授权临时读写及清理。
+  不用于普通知识库查询或首次连接配置。 /
+  Run explicitly requested JishuDB MCP smoke checks or all-tools acceptance
+  through a configured host connector, with fixtures, cleanup, and a Markdown
+  report. Default to read-only smoke checks; not for initial setup or ordinary
+  knowledge search.
 compatibility: Requires a host agent with a configured JishuDB MCP connector. The all-tools mode requires the jishudb profile. Optional direct-upload coverage requires the host to perform the returned raw HTTP PUT.
 metadata:
   author: jishudb
   version: "0.1.2"
+  openclaw:
+    homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/jishudb-mcp-check
   target-contract: "jishudb-mcp-v2"
   target-contract-digest: "d77bf4c43044a6e7cef5bf6a26842654b9a4e8307a069e91d16bcbf4022247cc"
 ---
@@ -17,6 +26,18 @@ knowledge search or document management.
 
 This is a consumer-level functional test. Do not claim raw MCP envelope,
 header, or protocol conformance unless the host exposes those surfaces.
+
+## Use this skill when
+
+- The user explicitly asks to smoke-test a configured JishuDB MCP connector.
+- The user requests a tool-catalog or capability check against the bundled contract.
+- The user requests an isolated all-tools acceptance run with temporary fixtures.
+- The user needs a functional acceptance report with observed results and cleanup.
+
+Do not use this skill merely because a connection fails or a document query
+returns no results. Use `jishudb` for initial setup and connection repair, or
+`jishudb-search` for ordinary retrieval. An all-tools request still requires
+the mutation approval described below.
 
 ## Modes
 

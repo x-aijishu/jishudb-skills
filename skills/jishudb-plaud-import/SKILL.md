@@ -1,10 +1,18 @@
 ---
 name: jishudb-plaud-import
-description: Import selected Plaud recordings, original audio, timestamped transcripts, or meeting summaries into a chosen JishuDB knowledge base, then retrieve the saved material or compare meetings with cited evidence. Use for archiving Plaud meetings, importing an exported recording, or comparing meeting requirements with existing project documents.
+description: >-
+  将选定的 Plaud 录音、原始音频、带时间戳的转写或会议纪要导入 JishuDB，
+  适用于会议归档、本地导出导入、保留来源关联及导入后的会议对比。 /
+  Archive selected Plaud recordings, audio, timestamped transcripts, or meeting
+  summaries in JishuDB from an authorized connector or local export. Preserve
+  source associations and compare imported meetings with cited project evidence;
+  not for recording-device control.
 compatibility: Requires authorized JishuDB MCP write tools and either authorized Plaud MCP source tools or an explicitly selected local export. Audio additionally requires HTTP direct upload, the advertised JishuDB audio capability, and a host able to transfer actual binary bytes. The identity helper uses Node.js 20 or later without dependencies.
 metadata:
   author: jishudb
   version: "0.1.0"
+  openclaw:
+    homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/jishudb-plaud-import
 ---
 
 # Plaud Recording Import
@@ -18,6 +26,18 @@ connecting or uploading, and use the
 [provenance record](references/provenance-record.md) for the saved association.
 Use the host's actual namespaced tools and live input schemas; tool names below
 are the unprefixed vendor and JishuDB names.
+
+## Use this skill when
+
+- The user wants to archive selected Plaud meetings in a JishuDB knowledge base.
+- The user selects a local Plaud audio, transcript, or summary export to import.
+- A resumed import needs to preserve the association between meeting representations.
+- The user wants to import meetings and then compare their requirements with project documents.
+
+Do not use this skill to start recordings, control hardware, access unsynced
+device-only recordings, or import other vendors' material. If all needed
+material is already archived and only retrieval is requested, use
+`jishudb-search`; use `jishudb` for destination connection setup.
 
 ## Scope and approval
 

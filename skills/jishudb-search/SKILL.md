@@ -1,8 +1,23 @@
 ---
 name: jishudb-search
-version: 0.1.0
-description: 查询 JishuDB 知识库，基于内部资料/文档作答并标注来源（RAG 检索工具）
-author: jishushell-team
+description: >-
+  查询 JishuDB 知识库和内部资料，适用于“查知识库”、/kb、
+  “有哪些文件”“这份文档讲了什么”“导入完成了吗”，基于真实结果作答并标注来源。 /
+  Search existing JishuDB knowledge bases and internal documents, list files,
+  read document contents, and check import status. Use for knowledge-base
+  questions or /kb requests; answer from retrieved evidence with citations,
+  not public-web research or document imports.
+compatibility: >-
+  Requires an authorized JishuDB connection. Document inventory, text, metadata,
+  and job status need the corresponding host MCP tools. The bundled HTTP helper
+  only lists knowledge bases and searches passages; it requires Bash, curl, and
+  a reachable JISHUDB_URL, with JISHUDB_TOKEN when authentication is enabled.
+metadata:
+  author: jishushell-team
+  version: "0.1.0"
+  openclaw:
+    homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/jishudb-search
+# Retain legacy discovery hints; command registration is host-specific.
 tags: [knowledge, rag, search, kb, retrieval]
 slash_command: /kb
 ---
@@ -10,6 +25,19 @@ slash_command: /kb
 # 知识库检索（JishuDB）
 
 当用户的问题需要**内部资料 / 文档 / 知识库**里的事实，或用户输入 `/kb`、说「查知识库 / 查资料 / 基于文档回答」时，使用本技能先检索、再据检索结果作答。**不要凭空编造**——答案必须来自检索到的片段。
+
+## Use this skill when
+
+- The user asks a factual question about material already stored in JishuDB.
+- The user wants an exact knowledge-base or document inventory.
+- The user asks to read a particular document or inspect its current metadata.
+- The user asks whether an import has finished or uses `/kb` as a search request.
+
+Do not use this skill to import new material or research the public web.
+Use `jishudb` for setup or connection repair, `research-report-hunter` to discover
+external reports, and `jishudb-plaud-import` to archive selected Plaud material.
+The `/kb` field is a legacy hint, not a portable command registration; use the
+host's supported Skill loader if no such command exists.
 
 ## 请求必须路由到对应工具
 

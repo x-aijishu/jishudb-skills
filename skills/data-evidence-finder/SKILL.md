@@ -1,10 +1,11 @@
 ---
 name: data-evidence-finder
 description: >-
-  Find citable numbers and research evidence for a proposal, presentation, or
-  market question. Produce data tables, citation text, measurement scope, and
-  conflicting or missing evidence instead of manufacturing support for a claim.
-  JishuDB preserves numerical claims, source passages, and analysis revisions.
+  为方案、PPT 或市场判断查找可引用的数据和研究证据，适用于市场规模、
+  增长率、统计口径核对、数据来源追溯和观点验证；交付数据表、引用及相反证据。 /
+  Find citable statistics and research evidence for a claim, proposal, or market
+  question. Verify market size, growth rates, measurement scope, and conflicting
+  findings; deliver evidence tables and citation text, retained in JishuDB.
 compatibility: >-
   WorkBuddy or another Agent Skills-compatible host with JishuDB MCP, public or
   authorized browsing/search, and approved text/CSV output. Chart extraction
@@ -12,6 +13,8 @@ compatibility: >-
 metadata:
   author: jishudb
   version: "0.1.0"
+  openclaw:
+    homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/data-evidence-finder
 ---
 
 # Data Evidence Finder
@@ -19,6 +22,18 @@ metadata:
 Find what the evidence supports, including evidence against the user's initial
 claim. JishuDB is required. Read the packaged
 [evidence contract](references/evidence-contract.md) before discovery.
+
+## Use this skill when
+
+- The user needs a citable number for a proposal, presentation, or market question.
+- A market-size or growth-rate claim needs its source, period, units, or scope checked.
+- Conflicting statistics need comparison without merging incompatible measurements.
+- The user wants evidence that supports, qualifies, or contradicts a proposed claim.
+
+Do not use this skill for a report reading list alone; use
+`research-report-hunter`. Use `industry-report-sprint` for a complete written
+industry report, or `industry-opportunity-radar` for changes across saved
+evidence snapshots. Do not manufacture support for a preferred conclusion.
 
 ## Start and authorize
 
