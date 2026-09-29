@@ -1,18 +1,43 @@
+<!-- 需要素材：assets/jishudb-skills-banner.png -->
+
 # JishuDB Skills
 
-这是一组围绕 [JishuDB](https://github.com/x-aijishu/jishudb) 的 14 个 Agent Skills，
-覆盖安装连接、知识库检索、MCP 验收、行业研究、内容制作和 Plaud 会议归档。
-按需要解决的问题和最终产物选择 Skill；安装 Skill 不等于已经连接服务或完成任务。
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-Fourteen Agent Skill packages for working with
-[JishuDB](https://github.com/x-aijishu/jishudb): setup, retrieval, MCP acceptance,
-task-oriented content workflows, and Plaud recording import. Choose by the
-problem and required deliverable; installing a Skill is not a completed
-connection or task.
+**把知识检索、研究和内容生产变成 Agent 可以直接发现和调用的任务入口。**  
+**Discoverable Agent Skills for JishuDB setup, knowledge retrieval, MCP checks, research, presentations, websites, and content workflows.**
 
-This repository hosts Skill instructions and their bundled helpers, references,
-and fixtures. The JishuDB service and Desktop application are maintained
-separately.
+本仓库包含 14 个围绕 JishuDB 的 Agent Skills，覆盖安装连接、知识库检索、MCP 验收、行业研究、内容制作和 Plaud 会议归档。
+
+This repository contains 14 Agent Skills for JishuDB setup, retrieval, MCP acceptance, research, content production, and Plaud meeting archival.
+
+[JishuDB](https://github.com/x-aijishu/jishudb) · [Desktop Releases](https://github.com/x-aijishu/jishudb-desktop-releases) · [AIJISHU](https://aijishu.com/)
+
+<!-- 若 JishuDB 保持私有，建立公开产品页后替换上方 JishuDB 链接。 -->
+
+
+<img src="./assets/JishuDBSkillsBanner.png" alt="JishuDB Skills" width="100%">
+
+## 什么时候使用这个仓库 / Use this repository when
+
+当用户希望 Agent 完成以下任务时，可以在本仓库中选择对应 Skill：
+
+- 安装 JishuDB，连接 MCP，或排查 Agent 无法访问知识库的问题
+- 搜索 JishuDB 中已有的文件、知识和导入状态，并保留来源
+- 对已经配置的 JishuDB MCP 连接执行冒烟测试或完整验收
+- 查找研报、核验数据，或撰写带引用的行业分析
+- 根据研究资料制作 PPT、网站、公众号、小红书或短视频文稿
+- 准备面试、跟踪行业机会，或归档 Plaud 会议资料
+
+Use this repository when an Agent needs to set up or search JishuDB, validate a
+JishuDB MCP connection, discover research reports, verify statistics, create
+source-grounded analysis, build presentations or websites, adapt research into
+content, prepare interviews, monitor an industry, or archive Plaud material.
+
+Each Skill is a standalone task package with a `SKILL.md` entrypoint and any
+required scripts, references, assets, or fixtures. Select by the user's primary
+goal and expected deliverable rather than loading every package that shares a
+keyword.
 
 ## 选择 Skill / Choose a skill
 
@@ -81,92 +106,53 @@ checks or approval.
 | `industry-opportunity-radar` | 对比上次保存的储能行业基线，说明这次有哪些变化、机会假设和风险。 | Compare current energy-storage evidence with the saved baseline and explain changes, hypotheses, and risks. |
 | `jishudb-plaud-import` | 把我选中的 Plaud 会议录音和已有转写导入指定知识库，再对比项目需求。 | Import my selected Plaud recording and existing transcript into the chosen KB, then compare project requirements. |
 
-## 使用 Skill / Use a Skill
+## Quick Start / 快速开始
 
-克隆仓库或使用宿主支持的安装器，再通过宿主的 Skill 加载器选择所需包。
-务必保留包内的脚本、引用和附件；需要连接 JishuDB 时加载 `jishudb` 配套包。
-安装 Skill 不授予应用安装、账户访问、知识库写入或发布权限。
-
-Clone this repository or use your host's supported repository-based Skill
-installer:
-
-```sh
+```bash
 git clone https://github.com/x-aijishu/jishudb-skills.git
 ```
 
-Select the desired package with the host's Skill loader. Keep the entire
-directory, including any `references/`, `scripts/`, `assets/`, and standalone
-helper files; copying only `SKILL.md` can omit required resources. Preserve
-executable permissions and the exact MCP fixture bytes.
+通过宿主支持的 Skill 加载器选择所需包。必须保留完整目录，包括 `references/`、`scripts/`、`assets/`、Fixtures 和辅助文件。
 
-Read the selected entrypoint before running its helpers. Helper paths are
-relative to their package unless the instructions explicitly show a
-repository-root command.
+Use the host's supported Skill loader and keep each full package. Copying only `SKILL.md` can omit required resources.
 
-Task workflows require JishuDB as their persistence backend. Reuse an existing
-authorized connection; if setup is needed, also load the `jishudb` companion
-package. Installing a Skill does not authorize application installation, account
-access, knowledge-base writes, publishing, or recurring execution.
+<!-- 缺少：按已验证宿主分别编写的公开安装教程和 Skill 市场集合页。 -->
 
-The host must provide the browsing, file output, presentation, graphic, or
-source-connector capabilities required by the selected workflow. Missing tools
-must not be disguised as completed deliverables. Personal interview practice
-requires separate retention approval, and recurring radar runs require an
-actual authorized host scheduler.
+## JishuDB Dependency
 
-## 元数据约定 / Metadata conventions
+任务型 Skills 使用 JishuDB 作为知识和持久化后端。已有授权连接时直接复用；需要安装或修复连接时，同时加载 `jishudb` Skill。
 
-所有包使用顶层 `name`、中英双语 `description` 和 `compatibility`，
-作者与版本保存在 `metadata.author`、`metadata.version`。
-`metadata.openclaw.homepage` 是 OpenClaw 的主页展示扩展，其他宿主可能忽略它。
-`jishudb-search` 保留旧的 `tags` 和 `slash_command` 提示；
-`/kb` 是否注册为命令由宿主决定，不是跨宿主保证。
+Task workflows use JishuDB as their knowledge and persistence backend. Reuse an authorized connection or load the companion `jishudb` Skill when setup is needed.
 
-All packages keep discovery and environment requirements in top-level `name`,
-`description`, and `compatibility`, with author and version under `metadata`.
-Descriptions use Chinese task phrases followed by `/` and English discovery text.
-Each entrypoint includes `Use this skill when` and explicit non-use guidance
-before its execution steps.
+## Permissions and Boundaries / 权限与边界
 
-The `metadata.openclaw.homepage` mapping follows the
-[OpenClaw Skill extension](https://docs.openclaw.ai/tools/skills#optional-frontmatter-keys),
-not a universal host requirement. The search package retains legacy `tags` and
-`slash_command` hints to avoid removing potential host-specific discovery data;
-their consumption by legacy clients has not been verified. Do not assume `/kb`
-registration from this field. Use the host's supported Skill loader or actual
-registered command.
+安装 Skill 不授予：
 
-## Service and release boundaries
+- 应用安装和账户访问权限
+- 知识库写入权限
+- 发布权限
+- 定期执行权限
+- 将未完成任务报告为成功的权限
 
-This repository does not contain or deploy the JishuDB backend, Desktop
-application, models, or runtime binaries. Desktop installation helpers retain
-their original fixed trust inputs:
+The host must provide the browsing, file, presentation, graphic, or connector capabilities required by the selected workflow. Missing tools must be reported explicitly.
 
-- Source repository: `x-aijishu/jishudb`
-- Desktop release repository: `x-aijishu/jishudb-desktop-releases`
+## Metadata and Development / 元数据与开发
 
-Do not replace those installer targets with this Skills repository. Follow the
-packaged installation contract and its approval, platform, and authorization
-gates.
+- 顶层使用 `name`、中英双语 `description` 和 `compatibility`
+- 作者与版本位于 `metadata.author` 和 `metadata.version`
+- `metadata.openclaw.homepage` 仅是 OpenClaw 扩展
+- 不应假设所有宿主都会注册遗留 `slash_command`
 
-Plaud imports require an authorized source connection or an explicitly selected
-local export. Audio additionally requires a compatible deployed JishuDB
-write-capable HTTP direct-upload connection and enabled speech service;
-MP3/M4A require its configured decoder. Copying these packages does not establish
-real-account, host, or mainland-network compatibility.
+本仓库不包含 JishuDB 后端、Desktop 应用、模型或运行时二进制。
 
-## Import provenance
+## Import Provenance
 
-The initial import preserves the complete `skills/` tree from the JishuDB source
-snapshot `d4e35449e70f412c8178c495becb85897ca31c87`, including helper scripts,
-references, and binary fixtures. The original source packages remain in place;
-this import does not configure automatic synchronization between repositories.
-
-Service-source paths quoted in provenance records, such as
-`docs/contracts/jishudb-mcp-v2.json`, refer to the JishuDB source repository,
-not missing local runtime dependencies. The MCP acceptance package includes
-its own contract baseline and fixtures.
+初始导入保留了 JishuDB 源快照 `d4e35449e70f412c8178c495becb85897ca31c87` 中完整的 `skills/` 树、辅助脚本、引用和二进制 Fixtures。
 
 ## License
 
-[Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for upstream attribution.
+[Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for attribution.
+
+## About AIJISHU
+
+Built by [AIJISHU](https://aijishu.com/) — practical AI tools for knowledge, agents, evaluation, and real-world development.
