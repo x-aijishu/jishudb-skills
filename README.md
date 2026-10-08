@@ -145,6 +145,27 @@ The host must provide the browsing, file, presentation, graphic, or connector ca
 
 本仓库不包含 JishuDB 后端、Desktop 应用、模型或运行时二进制。
 
+## Skill authoring standard
+
+新增或较大幅度修改 Skill 时，遵循
+[`docs/SKILL_SPEC.md`](docs/SKILL_SPEC.md) 的统一结构，并从
+[`templates/SKILL.template.md`](templates/SKILL.template.md) 开始。现有 Skill
+在被实质修改时逐步迁移，
+无需为了格式一次性重写。规范固定三层顺序：供人快速判断的摘要、供 Agent 执行的流程、
+以及文件末尾供全文检索的 Discovery 附录；自动发现仍以前置 YAML `description` 为准。
+
+For new or substantially revised Skills, follow the shared
+[`docs/SKILL_SPEC.md`](docs/SKILL_SPEC.md) and start from
+[`templates/SKILL.template.md`](templates/SKILL.template.md). Existing Skills
+migrate when they are materially touched rather than through a formatting-only
+rewrite.
+
+All fourteen Skills now use the quick-scan table, Agent workflow, and final
+Discovery appendix. Keep that structure when updating existing packages.
+
+Review the Skill from its packaged directory and verify every linked reference,
+script, asset, capability claim, authorization boundary, and completion check.
+
 ## Import Provenance
 
 初始导入保留了 JishuDB 源快照 `d4e35449e70f412c8178c495becb85897ca31c87` 中完整的 `skills/` 树、辅助脚本、引用和二进制 Fixtures。

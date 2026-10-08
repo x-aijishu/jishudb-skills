@@ -10,22 +10,25 @@ description: >-
 compatibility: Requires authorized JishuDB MCP write tools and either authorized Plaud MCP source tools or an explicitly selected local export. Audio additionally requires HTTP direct upload, the advertised JishuDB audio capability, and a host able to transfer actual binary bytes. The identity helper uses Node.js 20 or later without dependencies.
 metadata:
   author: jishudb
-  version: "0.1.0"
+  version: "0.1.1"
   openclaw:
     homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/jishudb-plaud-import
 ---
 
 # Plaud Recording Import
 
-Archive the selected meeting, not merely a download URL. JishuDB is the required
-destination. Keep Plaud transcripts, Plaud summaries, and JishuDB-generated
-transcription distinct.
+Archive selected Plaud audio, timestamped transcripts, and summaries in JishuDB
+with stable source associations. Keep each representation distinct and verify
+saved material before offering cited comparisons.
 
-Read [connection and transfer](references/connection-and-transfer.md) before
-connecting or uploading, and use the
-[provenance record](references/provenance-record.md) for the saved association.
-Use the host's actual namespaced tools and live input schemas; tool names below
-are the unprefixed vendor and JishuDB names.
+## At a glance
+
+| Item | Details |
+| --- | --- |
+| Use when | Selected Plaud meetings or local exports need archival and optional follow-up comparison. |
+| Delivers | Saved representations, verified processing status, provenance records, and requested cited analysis. |
+| Requires | JishuDB write access and authorized Plaud/local material; compatible direct upload for audio. |
+| Does not | Control recording hardware, access unsynced device-only material, or silently drop requested audio. |
 
 ## Use this skill when
 
@@ -34,12 +37,22 @@ are the unprefixed vendor and JishuDB names.
 - A resumed import needs to preserve the association between meeting representations.
 - The user wants to import meetings and then compare their requirements with project documents.
 
+## Do not use this skill when
+
 Do not use this skill to start recordings, control hardware, access unsynced
 device-only recordings, or import other vendors' material. If all needed
 material is already archived and only retrieval is requested, use
 `jishudb-search`; use `jishudb` for destination connection setup.
 
-## Scope and approval
+## Agent workflow
+
+Read [connection and transfer](references/connection-and-transfer.md) before
+connecting or uploading, and use the
+[provenance record](references/provenance-record.md) for the saved association.
+Use the host's actual namespaced tools and live input schemas; tool names below
+are the unprefixed vendor and JishuDB names.
+
+### Scope and approval
 
 1. Resolve the recording selection, material mode, destination KB, and output
    directory from the request. For an unqualified recording import, propose
@@ -55,7 +68,7 @@ material is already archived and only retrieval is requested, use
    material, add other vendors, publish content, or create external tasks.
    Recurring imports need separately authorized host automation.
 
-## Connect and select
+### Connect and select
 
 1. Locate the JishuDB connector and call `kb_get_capabilities`. Require the
    deployed `jishudb-mcp-v2` contract and the necessary write tools. If setup
@@ -83,7 +96,7 @@ material is already archived and only retrieval is requested, use
    identifies that recording; otherwise use a stable user-approved local
    source identifier instead of inventing a Plaud ID.
 
-## Resolve prior imports before writing
+### Resolve prior imports before writing
 
 1. Use [the identity helper](scripts/recording-identity.mjs) with the confirmed
    non-secret account scope, recording ID, and KB ID. For a local-only export,
@@ -105,7 +118,7 @@ material is already archived and only retrieval is requested, use
    automatically. If a manifest references a missing/deleted resource, report
    it and obtain approval before recreating it.
 
-## Acquire and import selected material
+### Acquire and import selected material
 
 1. Before downloading audio, require `mcp.upload.audio.enabled`, its `direct`
    mode, the requested extension, and acceptable size/duration. Inspect
@@ -140,7 +153,7 @@ material is already archived and only retrieval is requested, use
    uncommitted transfer must be recorded explicitly; it is not permission to
    duplicate an already saved recording.
 
-## Persist provenance and complete
+### Persist provenance and complete
 
 1. Poll `kb_get_job` at a reasonable interval, for at most two minutes in the
    current interaction. A still-running job is `PARTIAL`, not failed or
@@ -185,3 +198,22 @@ recovery action:
 Never print credentials, upload headers, signed URLs, or account/device
 identifiers in the completion report. This package does not claim a tested
 Plaud account, WorkBuddy integration, or mainland network configuration.
+
+## Discovery
+
+### Keywords
+
+- Chinese: Plaud录音导入、会议归档、音频导入、带时间戳转写、来源关联.
+- English: Plaud import, local recording export, meeting transcript, provenance, duplicate reconciliation.
+
+### Example requests
+
+- “把我选中的Plaud录音和已有转写导入指定知识库。”
+- “导入这份Plaud本地导出，再对比已归档的项目需求。”
+- “Archive selected Plaud meetings while preserving audio and transcript associations.”
+- “Resume this interrupted recording import and check what is already saved.”
+
+### Nearby but different
+
+- Read material already archived in JishuDB → `jishudb-search`.
+- Repair the destination connection → `jishudb`.

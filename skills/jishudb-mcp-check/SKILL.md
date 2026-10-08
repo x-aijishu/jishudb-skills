@@ -11,7 +11,7 @@ description: >-
 compatibility: Requires a host agent with a configured JishuDB MCP connector. The all-tools mode requires the jishudb profile. Optional direct-upload coverage requires the host to perform the returned raw HTTP PUT.
 metadata:
   author: jishudb
-  version: "0.1.2"
+  version: "0.1.3"
   openclaw:
     homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/jishudb-mcp-check
   target-contract: "jishudb-mcp-v2"
@@ -20,12 +20,18 @@ metadata:
 
 # JishuDB MCP Check
 
-Run an explicit, on-demand acceptance check against the JishuDB MCP tools
-already connected to the host agent. Do not activate this Skill for ordinary
-knowledge search or document management.
+Run an explicitly requested functional acceptance check through the host's
+configured JishuDB MCP connector. Deliver a Markdown report with observed
+results and cleanup status.
 
-This is a consumer-level functional test. Do not claim raw MCP envelope,
-header, or protocol conformance unless the host exposes those surfaces.
+## At a glance
+
+| Item | Details |
+| --- | --- |
+| Use when | A configured connector needs an explicit smoke test or all-tools acceptance run. |
+| Delivers | Observed test results, coverage gaps, cleanup status, and a Markdown acceptance report. |
+| Requires | A configured host MCP connector; the jishudb profile and scoped approval for all-tools mode. |
+| Does not | Perform initial setup, use private HTTP APIs, or mutate existing user resources. |
 
 ## Use this skill when
 
@@ -34,12 +40,19 @@ header, or protocol conformance unless the host exposes those surfaces.
 - The user requests an isolated all-tools acceptance run with temporary fixtures.
 - The user needs a functional acceptance report with observed results and cleanup.
 
+## Do not use this skill when
+
 Do not use this skill merely because a connection fails or a document query
 returns no results. Use `jishudb` for initial setup and connection repair, or
 `jishudb-search` for ordinary retrieval. An all-tools request still requires
 the mutation approval described below.
 
-## Modes
+## Agent workflow
+
+This is a consumer-level functional test. Do not claim raw MCP envelope,
+header, or protocol conformance unless the host exposes those surfaces.
+
+### Modes
 
 - `smoke`: read-only connection and capability checks. Use this by default
   when the user does not specify a mode.
@@ -53,7 +66,7 @@ mode. Also read
 the running catalog with this Skill version. For `all-tools`, also read
 [references/fixture-values.md](references/fixture-values.md).
 
-## Safety rules
+### Safety rules
 
 1. Never print, summarize, save, or place in the report:
    - the MCP bearer;
@@ -76,7 +89,7 @@ the running catalog with this Skill version. For `all-tools`, also read
    `kb_import_url`. Do not substitute another external URL without user
    approval.
 
-## Result states
+### Result states
 
 - `PASS`: the required behavior and assertions were observed.
 - `FAIL`: prerequisites existed but behavior or output was wrong.
@@ -88,7 +101,7 @@ the running catalog with this Skill version. For `all-tools`, also read
 Use `PARTIAL` overall when there are no failures but at least one case is
 `BLOCKED`.
 
-## Preflight
+### Preflight
 
 1. Confirm the host exposes the JishuDB connector.
 2. Call `kb_get_capabilities`.
@@ -114,7 +127,7 @@ user that the run will create one temporary knowledge base, three fixture
 documents, one Note, and related ingest jobs, then delete its own resources.
 Obtain one approval for that complete scope.
 
-## Run state
+### Run state
 
 Generate and retain:
 
@@ -141,7 +154,7 @@ caseId, tool, expected, evidence, result, errorCode, cleanupImpact
 When the host hides `_meta["io.jishudb/errorCode"]`, use
 `errorCode=not-exposed` and retain only a sanitized client-visible error.
 
-## Execution
+### Execution
 
 Follow the order in [references/test-cases.md](references/test-cases.md).
 
@@ -156,7 +169,7 @@ Follow the order in [references/test-cases.md](references/test-cases.md).
   mark its positive path `BLOCKED` and use the PDF Base64 fixture for downstream
   document tests.
 
-## Cleanup
+### Cleanup
 
 Attempt cleanup even after failures:
 
@@ -168,7 +181,7 @@ Attempt cleanup even after failures:
 
 Never broaden cleanup to similarly named resources.
 
-## Report
+### Report
 
 Render the final answer using
 [references/report-template.md](references/report-template.md).
@@ -185,3 +198,28 @@ Include:
 
 Do not claim success merely because a tool call returned. Apply every listed
 assertion to the returned evidence.
+
+## Resources
+
+- [`assets/canary.txt`](assets/canary.txt): Use only in the all-tools fixture cases described by the test cases and fixture-values references; preserve exact bytes.
+- [`assets/canary.pdf`](assets/canary.pdf): Use only in the all-tools fixture cases described by the test cases and fixture-values references; preserve exact bytes.
+- [`assets/canary.md`](assets/canary.md): Use only in the all-tools fixture cases described by the test cases and fixture-values references; preserve exact bytes.
+
+## Discovery
+
+### Keywords
+
+- Chinese: MCP冒烟测试、工具验收、能力核对、验收报告、临时资源清理.
+- English: JishuDB MCP smoke test, all-tools acceptance, tool catalog, contract baseline, fixture cleanup.
+
+### Example requests
+
+- “对已配置的JishuDB MCP做一次只读冒烟测试。”
+- “核对可用工具与打包契约，输出验收报告。”
+- “Run all-tools acceptance in an isolated scope and report fixture cleanup.”
+- “Smoke-test my configured JishuDB connector and list untested capabilities.”
+
+### Nearby but different
+
+- Initial setup or a connection repair → `jishudb`.
+- Ordinary knowledge-base questions → `jishudb-search`.

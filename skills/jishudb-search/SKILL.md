@@ -14,7 +14,7 @@ compatibility: >-
   a reachable JISHUDB_URL, with JISHUDB_TOKEN when authentication is enabled.
 metadata:
   author: jishushell-team
-  version: "0.1.0"
+  version: "0.1.1"
   openclaw:
     homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/jishudb-search
 # Retain legacy discovery hints; command registration is host-specific.
@@ -26,6 +26,15 @@ slash_command: /kb
 
 当用户的问题需要**内部资料 / 文档 / 知识库**里的事实，或用户输入 `/kb`、说「查知识库 / 查资料 / 基于文档回答」时，使用本技能先检索、再据检索结果作答。**不要凭空编造**——答案必须来自检索到的片段。
 
+## At a glance
+
+| Item | Details |
+| --- | --- |
+| Use when | Questions concern documents, file inventory, or import status already in JishuDB. |
+| Delivers | Answers with source filenames, verified inventories, document text, or observed job status. |
+| Requires | An authorized JishuDB connection; the HTTP helper needs Bash and curl and only lists KBs or searches. |
+| Does not | Import new material, research the public web, or infer file counts from search passages. |
+
 ## Use this skill when
 
 - The user asks a factual question about material already stored in JishuDB.
@@ -33,13 +42,17 @@ slash_command: /kb
 - The user asks to read a particular document or inspect its current metadata.
 - The user asks whether an import has finished or uses `/kb` as a search request.
 
+## Do not use this skill when
+
 Do not use this skill to import new material or research the public web.
 Use `jishudb` for setup or connection repair, `research-report-hunter` to discover
 external reports, and `jishudb-plaud-import` to archive selected Plaud material.
 The `/kb` field is a legacy hint, not a portable command registration; use the
 host's supported Skill loader if no such command exists.
 
-## 请求必须路由到对应工具
+## Agent workflow
+
+### 请求必须路由到对应工具
 
 - 问“有哪些知识库”、知识库名称、标识或数量：调用 `kb_list`，只按本轮工具结果回答。
 - 问某个知识库“有哪些文件”、精确文件名或文件数量：调用 `kb_list_documents`；若返回 `nextCursor`，继续翻页直到结束。只列返回的 `documents`，不得从检索片段、正文、历史对话或任务记录补出文件名。
@@ -51,7 +64,7 @@ host's supported Skill loader if no such command exists.
 
 本技能目录里有一个零依赖脚本 `kb-search.sh`（用 curl 调 KB 的 HTTP API）。KB 地址由环境变量 `JISHUDB_URL` 配置（JishuShell 面板绑定时会自动注入；独立使用时自行 export，默认 `http://host.docker.internal:18089`）；若 KB 开了鉴权，另设 `JISHUDB_TOKEN`。
 
-## 1. 不确定有哪些知识库时，先列出
+### 1. 不确定有哪些知识库时，先列出
 
 ```bash
 bash skills/jishudb-search/kb-search.sh list
@@ -59,7 +72,7 @@ bash skills/jishudb-search/kb-search.sh list
 
 输出每个库的 `id` / 名称 / 块数。挑一个相关的 `id` 用于检索。
 
-## 2. 检索
+### 2. 检索
 
 ```bash
 bash skills/jishudb-search/kb-search.sh search "用户的问题或关键词" <kb-id>
@@ -83,14 +96,37 @@ Top 6 passages (cite the source filename in your answer):
     …
 ```
 
-## 3. 据检索结果作答
+### 3. 据检索结果作答
 
 - **综合**这些片段写出答案，用自己的话组织。
 - **标注来源**：在答案里点名引用的文件名（如「据 `01-quick-start.md`…」），或在末尾列出来源。
 - 若返回 `No matching passages found`，**如实告知**知识库里没有相关内容，不要编造；可建议换关键词或换一个库（先 `list`）。
 - 相关度 `low` 的片段要谨慎使用，必要时说明置信度不高。
 
-## 备注
+### 备注
 
 - 脚本只读、无副作用，可安全多次调用（同一轮可对不同关键词检索几次再综合）。
 - 若 `kb-search: curl not found` / 无法连接：说明运行环境缺 curl 或网络不通 KB，提示用户检查 KB 应用是否在面板里处于运行状态。
+
+## Resources
+
+- [`kb-search.sh`](kb-search.sh): Use the read-only HTTP helper for knowledge-base listing or passage search when its documented environment is available; other operations require host MCP tools.
+
+## Discovery
+
+### Keywords
+
+- Chinese: 查知识库、内部资料、文件清单、文档正文、导入进度.
+- English: JishuDB search, /kb, passage retrieval, document inventory, ingest job status.
+
+### Example requests
+
+- “查知识库里的产品文档：支持哪些导入格式？标注来源。”
+- “这个知识库有哪些文件？那份文档导入完成了吗？”
+- “Search the existing knowledge base and cite the source filenames.”
+- “Read this document's contents rather than reconstructing it from snippets.”
+
+### Nearby but different
+
+- Application installation or connection repair → `jishudb`.
+- Discover external research reports → `research-report-hunter`.
