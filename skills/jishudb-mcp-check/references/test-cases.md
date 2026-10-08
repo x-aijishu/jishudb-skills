@@ -151,7 +151,20 @@ record the remaining IDs and set the overall result to `FAIL`.
 
 ## Profile behavior
 
-- `default`: require the 17 read tools reported by capabilities; write/source
+- `default`: require the 18 read tools reported by capabilities; write/source
   tools must be absent. `smoke` may pass; `all-tools` is `BLOCKED`.
-- `jishudb`: expect all 34 current tools. Report additions or removals rather
+- `jishudb`: expect the 35 baseline tools. Report additions or removals rather
   than silently using an outdated catalog.
+
+## Runtime preparation extension
+
+Call `kb_get_readiness` for the isolated test KB and record dependency and actual
+inference status separately from connection success. Basic text readiness does
+not certify OCR/audio/Vault. Do not mutate model settings to make this check pass.
+
+`kb_prepare_runtime` is conditional on explicit onboarding preparation authority,
+independent of the read/write profile. Its absence on an ordinary connection is
+expected. When present, test idempotent observation of a completed authorized job;
+retry a failed download only within its existing authorization and recovery rules.
+Reject arbitrary URL/path/model arguments. Record missing preparation authority
+as a scoped limitation, not failed ordinary MCP read/write acceptance.

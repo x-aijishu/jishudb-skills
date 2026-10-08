@@ -3,7 +3,7 @@
 - **Run ID:** `<runId>`
 - **Skill version:** `0.1.2`
 - **Packaged contract baseline:** `jishudb-mcp-v2`
-- **Packaged contract digest:** `d77bf4c43044a6e7cef5bf6a26842654b9a4e8307a069e91d16bcbf4022247cc`
+- **Packaged contract digest:** `709a2c7dd407c6303ef56b209dacd172e7e8c123bdc5492f578b610eb791544a`
 - **Mode:** `smoke | all-tools`
 - **Started / Finished:** `<timestamps>`
 - **Agent / Client:** `<host identity if known>`

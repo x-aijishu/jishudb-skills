@@ -15,7 +15,7 @@ metadata:
   openclaw:
     homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/jishudb-mcp-check
   target-contract: "jishudb-mcp-v2"
-  target-contract-digest: "d77bf4c43044a6e7cef5bf6a26842654b9a4e8307a069e91d16bcbf4022247cc"
+  target-contract-digest: "709a2c7dd407c6303ef56b209dacd172e7e8c123bdc5492f578b610eb791544a"
 ---
 
 # JishuDB MCP Check

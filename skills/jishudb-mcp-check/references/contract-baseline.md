@@ -1,17 +1,18 @@
 # Contract Baseline
 
-- Skill version: `0.1.2`
+- Skill version: `0.1.3`
 - Target MCP contract: `jishudb-mcp-v2`
 - Source artifact: `docs/contracts/jishudb-mcp-v2.json`
 - Source contract digest:
-  `d77bf4c43044a6e7cef5bf6a26842654b9a4e8307a069e91d16bcbf4022247cc`
-- Expected `default` profile tools: `17`
-- Expected `jishudb` profile tools: `34`
+  `709a2c7dd407c6303ef56b209dacd172e7e8c123bdc5492f578b610eb791544a`
+- Expected `default` profile tools: `18` (or `19` with explicit preparation authority)
+- Expected `jishudb` profile tools: `35` (or `36` with explicit preparation authority)
 
 The digest identifies the repository contract used to design this Skill. The
 running service may not expose a digest, so always compare visible tool names.
-This revision includes audio capability/status fields and opaque upload source
-associations without adding tool names. Record absent optional capabilities on
+This revision adds runtime readiness and conditionally exposes bounded model
+preparation. `kb_prepare_runtime` is optional and must be absent without explicit
+onboarding preparation authority; ordinary read/write scope is insufficient. Record absent optional capabilities on
 older deployments rather than assuming that a matching tool name supports them.
 
 ## Expected tools
@@ -40,6 +41,7 @@ kb_read_handbook
 kb_get_config
 kb_delete_document
 kb_delete_kb
+kb_get_readiness
 note_list
 note_get
 note_create
@@ -57,6 +59,8 @@ kb_sync_source
 
 - Contract name differs from `jishudb-mcp-v2`: stop with `FAIL`.
 - A baseline tool is missing: stop with `FAIL`.
+- `kb_prepare_runtime` is a conditional extension: require it only when capabilities
+  advertise preparation authority. Do not fail an ordinary connection for its absence.
 - New tools are present: test all known tools, list new tools as untested, and
   return no better than `PARTIAL`.
 - A runtime-exposed digest differs: report the mismatch and return no better

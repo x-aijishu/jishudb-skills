@@ -177,7 +177,10 @@ function selectRelease(paths) {
     if (typeof release.tag_name !== 'string' || !/^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(release.tag_name)) return;
     const version = release.tag_name.slice(1);
     const parts = semverParts(version);
-    const installerName = 'jishudb-desktop-' + version + '-unsigned-darwin-arm64.dmg';
+    const signedName = 'jishudb-desktop-' + version + '-darwin-arm64.dmg';
+    const hasSignedAssets = Array.isArray(release.assets) && release.assets.some((asset) =>
+      [signedName, signedName + '.sha256', signedName + '.candidate.json'].includes(asset.name));
+    const installerName = hasSignedAssets ? signedName : 'jishudb-desktop-' + version + '-unsigned-darwin-arm64.dmg';
     try {
       eligible.push({
         version,
@@ -205,12 +208,82 @@ function selectRelease(paths) {
   return selected;
 }
 
+// AI-generated signed-candidate boundary. Metadata binds OS checks; it never
+// substitutes for codesign, Gatekeeper or notarization-ticket verification.
+function validateSignedCandidate(candidate, selected) {
+  exactKeys(candidate, ['artifact', 'artwork', 'authorization', 'bundleIdentifier', 'distribution',
+    'minimumSystemVersion', 'product', 'productName', 'revision', 'runtimeLock', 'schemaVersion',
+    'signing', 'source', 'target', 'version',
+    ...(Object.prototype.hasOwnProperty.call(candidate, 'agentBackgroundLaunch') ? ['agentBackgroundLaunch'] : [])], 'candidate');
+  exactKeys(candidate.artifact, ['name', 'sha256', 'size'], 'candidate.artifact');
+  exactKeys(candidate.runtimeLock, ['path', 'sha256'], 'candidate.runtimeLock');
+  exactKeys(candidate.source, ['repository', 'runAttempt', 'runId'], 'candidate.source');
+  exactKeys(candidate.distribution, ['appNotarization', 'dmgNotarization', 'hardenedRuntime', 'mode',
+    'publisherIdentity', 'secureTimestamp', 'teamIdentifier'], 'candidate.distribution');
+  exactKeys(candidate.authorization, ['localUserPresence', 'mode', 'publisherIdentity', 'teamIdentifier'], 'candidate.authorization');
+  exactKeys(candidate.authorization.localUserPresence, ['firstAdmin', 'migration', 'recovery'], 'candidate.authorization.localUserPresence');
+  exactKeys(candidate.signing, ['certificateExpiresAt', 'certificateFingerprintSha256', 'nativeFileCount'], 'candidate.signing');
+  exactKeys(candidate.artwork, ['icns', 'png', 'source'], 'candidate.artwork');
+  if (candidate.schemaVersion !== 3 || candidate.product !== 'jishudb-desktop'
+    || candidate.productName !== 'JishuDB' || candidate.bundleIdentifier !== 'com.aijishu.jishudb'
+    || candidate.target !== 'darwin-arm64' || candidate.version !== selected.version
+    || candidate.source.repository !== 'x-aijishu/jishudb'
+    || candidate.artifact.name !== 'jishudb-desktop-' + selected.version + '-darwin-arm64.dmg'
+    || candidate.artifact.name !== selected.installer.name
+    || candidate.artifact.sha256 !== assetDigest(selected.installer, 'installer')
+    || candidate.artifact.size !== selected.installer.size
+    || candidate.runtimeLock.path !== 'packaging/macos/desktop-runtime-lock.json'
+    || candidate.distribution.mode !== 'developer-id-notarized-dmg-v1'
+    || candidate.distribution.publisherIdentity !== 'developer-id'
+    || candidate.distribution.hardenedRuntime !== true || candidate.distribution.secureTimestamp !== true
+    || candidate.authorization.mode !== 'signed-developer-id-v1'
+    || candidate.authorization.publisherIdentity !== 'developer-id'
+    || candidate.authorization.teamIdentifier !== candidate.distribution.teamIdentifier
+    || ['firstAdmin', 'migration', 'recovery'].some((key) => candidate.authorization.localUserPresence[key] !== true)) {
+    throw new Error('signed candidate identity or authority is invalid');
+  }
+  requireString(candidate.revision, /^[0-9a-f]{40}$/, 'candidate revision');
+  requireString(candidate.runtimeLock.sha256, /^[0-9a-f]{64}$/, 'candidate runtime lock');
+  requireString(candidate.distribution.teamIdentifier, /^[A-Z0-9]{10}$/, 'candidate team');
+  requireString(candidate.source.runId, /^[1-9][0-9]*$/, 'candidate run ID');
+  requireString(candidate.minimumSystemVersion, /^\d+\.\d+(?:\.\d+)?$/, 'minimum system version');
+  requireString(candidate.signing.certificateFingerprintSha256, /^[0-9a-f]{64}$/, 'certificate fingerprint');
+  requireString(candidate.signing.certificateExpiresAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/, 'certificate expiry');
+  if (!Number.isFinite(Date.parse(candidate.signing.certificateExpiresAt))
+    || !Number.isSafeInteger(candidate.signing.nativeFileCount) || candidate.signing.nativeFileCount <= 0
+    || !Number.isSafeInteger(candidate.source.runAttempt) || candidate.source.runAttempt <= 0
+    || (Object.prototype.hasOwnProperty.call(candidate, 'agentBackgroundLaunch') && candidate.agentBackgroundLaunch !== 1)) {
+    throw new Error('signed candidate evidence is invalid');
+  }
+  ['appNotarization', 'dmgNotarization'].forEach((key) => {
+    const value = candidate.distribution[key];
+    exactKeys(value, ['status', 'stapled', 'submissionId'], key);
+    if (value.status !== 'Accepted' || value.stapled !== true || typeof value.submissionId !== 'string' || !value.submissionId.trim()) throw new Error('candidate notarization is incomplete');
+  });
+  const artworkPaths = { source: 'desktop/assets/logo-jishudb.svg', png: 'desktop/assets/jishudb-icon.png', icns: 'desktop/assets/jishudb.icns' };
+  Object.keys(artworkPaths).forEach((key) => {
+    exactKeys(candidate.artwork[key], ['path', 'sha256'], 'artwork.' + key);
+    if (candidate.artwork[key].path !== artworkPaths[key]) throw new Error('candidate artwork path is invalid');
+    requireString(candidate.artwork[key].sha256, /^[0-9a-f]{64}$/, 'artwork digest');
+  });
+  return candidate;
+}
+
+function candidatePublisher(candidate) {
+  return candidate.schemaVersion === 3
+    ? { identity: 'developer-id', gatekeeper: 'accepted', teamIdentifier: candidate.distribution.teamIdentifier }
+    : { identity: 'none', gatekeeper: 'manual-required' };
+}
+
 function validateCandidate(candidate, selected) {
+  if (candidate && candidate.schemaVersion === 3) return validateSignedCandidate(candidate, selected);
   exactKeys(candidate, [
     'artifact', 'authorization', 'bundleIdentifier', 'distribution',
     'minimumSystemVersion', 'nativeFileCount', 'product', 'productName',
     'revision', 'runtimeLockSha256', 'schemaVersion', 'source', 'target', 'version',
+    ...(Object.prototype.hasOwnProperty.call(candidate, 'agentBackgroundLaunch') ? ['agentBackgroundLaunch'] : []),
   ], 'candidate');
+  if (Object.prototype.hasOwnProperty.call(candidate, 'agentBackgroundLaunch') && candidate.agentBackgroundLaunch !== 1) throw new Error('unsupported Agent launch contract');
   exactKeys(candidate.artifact, ['name', 'sha256'], 'candidate.artifact');
   exactKeys(candidate.source, ['repository', 'runAttempt', 'runId'], 'candidate.source');
   exactKeys(candidate.distribution, ['adHocIntegritySeal', 'gatekeeperAssessment', 'mode', 'notarization', 'publisherIdentity'], 'candidate.distribution');
@@ -260,7 +333,8 @@ function createPlan(selected, candidate, argv) {
   const now = new Date();
   const expires = new Date(now.getTime() + 30 * 60 * 1000);
   return {
-    schema: 'jishudb-agent-install-plan-v1',
+    schema: candidate.agentBackgroundLaunch === 1 ? 'jishudb-agent-install-plan-v2' : 'jishudb-agent-install-plan-v1',
+    ...(candidate.agentBackgroundLaunch === 1 ? {launchMode: 'agent-background'} : {}),
     createdAt: now.toISOString(),
     expiresAt: expires.toISOString(),
     operation: 'fresh-install',
@@ -292,10 +366,7 @@ function createPlan(selected, candidate, argv) {
       url: requireDesktopMCPURL(argv[6]),
       profile: 'default',
     },
-    publisher: {
-      identity: 'none',
-      gatekeeper: 'manual-required',
-    },
+    publisher: candidatePublisher(candidate),
   };
 }
 
@@ -303,12 +374,15 @@ function validatePlan(plan) {
   exactKeys(plan, [
     'schema', 'createdAt', 'expiresAt', 'operation', 'platform', 'userId',
     'release', 'assets', 'installation', 'connection', 'publisher',
+    ...(plan.schema === 'jishudb-agent-install-plan-v2' ? ['launchMode'] : []),
   ], 'plan');
   exactKeys(plan.release, ['repository', 'id', 'tag', 'version', 'targetCommitish', 'sourceRepository', 'sourceRevision'], 'plan.release');
   exactKeys(plan.assets, ['installer', 'checksum', 'candidate'], 'plan.assets');
   exactKeys(plan.installation, ['applicationPath', 'dataRoot', 'dataOwnershipAcknowledged'], 'plan.installation');
   exactKeys(plan.connection, ['client', 'configTarget', 'name', 'url', 'profile'], 'plan.connection');
-  exactKeys(plan.publisher, ['identity', 'gatekeeper'], 'plan.publisher');
+  const signed = plan.publisher && plan.publisher.identity === 'developer-id';
+  exactKeys(plan.publisher, signed ? ['identity', 'gatekeeper', 'teamIdentifier'] : ['identity', 'gatekeeper'], 'plan.publisher');
+  if (signed) requireString(plan.publisher.teamIdentifier, /^[A-Z0-9]{10}$/, 'plan publisher team');
   ['installer', 'checksum', 'candidate'].forEach((role) => {
     exactKeys(plan.assets[role], ['role', 'id', 'name', 'size', 'url', 'sha256'], 'plan.assets.' + role);
   });
@@ -320,12 +394,13 @@ function validatePlan(plan) {
     throw new Error('plan is expired or has an invalid lifetime');
   }
   requireDesktopMCPURL(plan.connection.url);
-  if (plan.schema !== 'jishudb-agent-install-plan-v1' || plan.operation !== 'fresh-install' ||
+  if (!['jishudb-agent-install-plan-v1', 'jishudb-agent-install-plan-v2'].includes(plan.schema) ||
+      (plan.schema === 'jishudb-agent-install-plan-v2' && plan.launchMode !== 'agent-background') || plan.operation !== 'fresh-install' ||
       plan.platform !== 'darwin-arm64' || plan.release.repository !== 'x-aijishu/jishudb-desktop-releases' ||
       plan.release.sourceRepository !== 'x-aijishu/jishudb' ||
       plan.connection.profile !== 'default' ||
       plan.installation.dataOwnershipAcknowledged !== true ||
-      plan.publisher.identity !== 'none' || plan.publisher.gatekeeper !== 'manual-required') {
+      (signed ? plan.publisher.gatekeeper !== 'accepted' : plan.publisher.identity !== 'none' || plan.publisher.gatekeeper !== 'manual-required')) {
     throw new Error('plan is outside the reviewed automatic-install contract');
   }
   if (!/^[1-9][0-9]*$/.test(plan.userId) || !Number.isSafeInteger(plan.release.id) || plan.release.id <= 0 ||
@@ -335,7 +410,7 @@ function validatePlan(plan) {
     throw new Error('plan release or user identity is invalid');
   }
   requireString(plan.release.sourceRevision, /^[0-9a-f]{40}$/, 'plan source revision');
-  const installerName = 'jishudb-desktop-' + plan.release.version + '-unsigned-darwin-arm64.dmg';
+  const installerName = 'jishudb-desktop-' + plan.release.version + (signed ? '-darwin-arm64.dmg' : '-unsigned-darwin-arm64.dmg');
   const names = {
     installer: installerName,
     checksum: installerName + '.sha256',
@@ -433,6 +508,8 @@ function run(argv) {
       },
     };
     const candidate = validateCandidate(readJSON(argv[0]), selected);
+    if (Object.keys(plan.publisher).some((key) => candidatePublisher(candidate)[key] !== plan.publisher[key])) throw new Error('candidate publisher does not match the approved plan');
+    if ((candidate.agentBackgroundLaunch === 1) !== (plan.schema === 'jishudb-agent-install-plan-v2')) throw new Error('Agent launch capability no longer matches the approved plan');
     if (candidate.revision !== plan.release.sourceRevision) throw new Error('candidate revision does not match the plan');
     return 'ok';
   }
@@ -479,9 +556,10 @@ function run(argv) {
           configTarget: plan.connection.configTarget,
           mcpUrl: plan.connection.url,
           profile: plan.connection.profile,
-          publisher: 'unsigned',
+          launchMode: plan.launchMode || 'foreground',
+          publisher: plan.publisher,
           coveredMutations: ['download', 'per-user install', 'Desktop launch', 'non-secret client entry'],
-          userPresence: ['Gatekeeper or manual-open', 'first administrator', 'MCP secret entry', 'client trust'],
+          userPresence: ['OS installation prompts', 'browser agreement and OAuth consent or existing-account login', 'owner verification where required', 'client trust'],
         },
       });
     }
@@ -568,6 +646,27 @@ validate_bundle_symlinks() {
       *) fail "installer_content_invalid" "${label} contains an escaping symlink" ;;
     esac
   done < <(/usr/bin/find -P "$bundle" -type l -print0)
+}
+
+# AI-generated signature boundary: run only for a digest-bound Developer ID
+# candidate, using the exact TeamIdentifier included in the approved plan.
+verify_signed_artifact() {
+  local target="$1" team="$2" kind="$3" signature_info
+  /usr/bin/codesign --verify --deep --strict "$target" >/dev/null 2>&1 ||
+    fail "signature_invalid" "Developer ID signature verification failed"
+  signature_info=$(/usr/bin/codesign --display --verbose=4 "$target" 2>&1) ||
+    fail "signature_invalid" "Developer ID signature could not be inspected"
+  print -r -- "$signature_info" | /usr/bin/grep -Fqx "TeamIdentifier=${team}" ||
+    fail "publisher_mismatch" "Developer ID team differs from the approved plan"
+  print -r -- "$signature_info" | /usr/bin/grep -q '^Authority=Developer ID Application:' ||
+    fail "signature_invalid" "Artifact lacks a Developer ID Application signature"
+  if [[ "$kind" == "dmg" ]]; then
+    /usr/sbin/spctl --assess --type open --context context:primary-signature "$target" >/dev/null 2>&1 ||
+      fail "gatekeeper_rejected" "Gatekeeper rejected the signed DMG"
+  else
+    /usr/sbin/spctl --assess --type execute "$target" >/dev/null 2>&1 ||
+      fail "gatekeeper_rejected" "Gatekeeper rejected the signed application"
+  fi
 }
 
 create_transaction_root() {
@@ -724,6 +823,11 @@ run_execute() {
   api_get "${API_ORIGIN}/repos/${RELEASE_REPOSITORY}/releases/${release_id}" "$release_path"
   jxa release-match "$release_path" "$PLAN_PATH" >/dev/null || fail "release_drift" "release changed during download"
 
+  local signed_team=""
+  if [[ "$(jxa plan-value "$PLAN_PATH" 'publisher.identity')" == "developer-id" ]]; then
+    signed_team=$(jxa plan-value "$PLAN_PATH" 'publisher.teamIdentifier')
+    verify_signed_artifact "$installer_path" "$signed_team" dmg
+  fi
   /bin/mkdir -m 700 -- "$mount_point"
   /usr/bin/hdiutil attach -readonly -nobrowse -mountpoint "$mount_point" "$installer_path" >/dev/null || fail "installer_mount_failed" "verified DMG could not be mounted read-only"
   [[ -d "${mount_point}/JishuDB.app" && ! -L "${mount_point}/JishuDB.app" ]] || fail "installer_content_invalid" "DMG does not contain one regular JishuDB.app"
@@ -731,6 +835,7 @@ run_execute() {
   mounted_apps=("$mount_point"/*.app)
   (( ${#mounted_apps} == 1 )) || fail "installer_content_invalid" "DMG contains an ambiguous application set"
   validate_bundle_symlinks "${mount_point}/JishuDB.app" "mounted application bundle"
+  [[ -z "$signed_team" ]] || verify_signed_artifact "${mount_point}/JishuDB.app" "$signed_team" app
   local bundle_id bundle_version runtime_binary
   bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${mount_point}/JishuDB.app/Contents/Info.plist")
   bundle_version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "${mount_point}/JishuDB.app/Contents/Info.plist")
@@ -745,16 +850,22 @@ run_execute() {
   /bin/mkdir -m 700 -- "$staging_root"
   /usr/bin/ditto --rsrc --extattr "${mount_point}/JishuDB.app" "${staging_root}/JishuDB.app" || fail "installer_copy_failed" "validated application bundle could not be staged"
   validate_bundle_symlinks "${staging_root}/JishuDB.app" "staged application bundle"
+  [[ -z "$signed_team" ]] || verify_signed_artifact "${staging_root}/JishuDB.app" "$signed_team" app
   [[ ! -e "$app_path" ]] || fail "existing_installation" "application destination appeared during staging"
   /bin/mv -- "${staging_root}/JishuDB.app" "$app_path"
   /usr/bin/hdiutil detach "$mount_point" >/dev/null || fail "installer_cleanup_failed" "DMG could not be detached"
   CLEANUP_MOUNT=""
   /bin/rmdir "$mount_point" "$staging_root" 2>/dev/null || true
   validate_bundle_symlinks "$app_path" "installed application bundle"
+  [[ -z "$signed_team" ]] || verify_signed_artifact "$app_path" "$signed_team" app
   [[ -f "${app_path}/Contents/Resources/runtime/jishudb" && ! -L "${app_path}/Contents/Resources/runtime/jishudb" ]] || fail "installed_receipt_invalid" "installed runtime receipt is invalid"
   jxa manifest "${app_path}/Contents/Resources/runtime/RELEASE-MANIFEST.json" "$version" "$revision" >/dev/null || fail "installed_receipt_invalid" "installed release manifest does not match the plan"
   write_endpoint_config "$data_root" "$mcp_url"
-  /usr/bin/open "$app_path" || fail "desktop_launch_failed" "installed Desktop could not be launched"
+  if [[ "$(jxa plan-value "$PLAN_PATH" 'schema')" == "jishudb-agent-install-plan-v2" ]]; then
+    /usr/bin/open -g "$app_path" --args --jishudb-agent-background || fail "desktop_launch_failed" "installed Desktop could not be launched in background"
+  else
+    /usr/bin/open "$app_path" || fail "desktop_launch_failed" "installed Desktop could not be launched"
+  fi
   jxa result installed "$version" "$app_path" "$data_root" "$mcp_url"
 }
 

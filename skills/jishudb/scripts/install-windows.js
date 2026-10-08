@@ -15,6 +15,8 @@ const API_VERSION = '2026-03-10';
 const ASSET_REDIRECT_HOST = 'release-assets.githubusercontent.com';
 const ASSET_REDIRECT_PREFIX = '/github-production-release-asset/1316997274/';
 const PLAN_SCHEMA = 'jishudb-agent-install-plan-v1';
+// AI-generated: versioned presentation intent is bound by the reviewed plan digest.
+const BACKGROUND_PLAN_SCHEMA = 'jishudb-agent-install-plan-v2';
 const PREFERRED_MCP_PORT = 8088;
 const RESERVED_LAN_MCP_PORT = 8089;
 const DESKTOP_MCP_PORT_SEARCH_LIMIT = 16;
@@ -629,7 +631,9 @@ function validateWindowsCandidate(candidate, selected, windowsRelease = os.relea
     'artifact', 'authorization', 'bundleIdentifier', 'distribution', 'minimumSystemVersion',
     'product', 'productName', 'publication', 'revision', 'runtimeLock', 'schemaVersion',
     'source', 'target', 'version',
+    ...(Object.hasOwn(candidate, 'agentBackgroundLaunch') ? ['agentBackgroundLaunch'] : []),
   ], 'candidate');
+  if (Object.hasOwn(candidate, 'agentBackgroundLaunch') && candidate.agentBackgroundLaunch !== 1) fail('invalid_candidate', 'unsupported Agent launch contract');
   requireExactProperties(candidate.runtimeLock, ['path', 'sha256'], 'candidate.runtimeLock');
   requireExactProperties(candidate.artifact, ['name', 'sha256', 'size'], 'candidate.artifact');
   requireExactProperties(candidate.distribution, ['authenticode', 'installationScope', 'mode', 'publisherIdentity', 'smartScreenAssessment'], 'candidate.distribution');
@@ -681,7 +685,7 @@ function newAssetPlan(asset, role) {
 }
 
 function assertPlanShape(plan) {
-  requireExactProperties(plan, ['schema', 'createdAt', 'expiresAt', 'operation', 'platform', 'userSid', 'release', 'assets', 'installation', 'connection', 'publisher'], 'plan');
+  requireExactProperties(plan, ['schema', 'createdAt', 'expiresAt', 'operation', 'platform', 'userSid', 'release', 'assets', 'installation', 'connection', 'publisher', ...(plan.schema === BACKGROUND_PLAN_SCHEMA ? ['launchMode'] : [])], 'plan');
   requireExactProperties(plan.release, ['repository', 'id', 'tag', 'version', 'targetCommitish', 'sourceRepository', 'sourceRevision'], 'plan.release');
   requireExactProperties(plan.assets, ['installer', 'checksum', 'candidate'], 'plan.assets');
   requireExactProperties(plan.installation, ['applicationRoot', 'dataRoot', 'bootstrapPath', 'desktopShortcut', 'dataOwnershipAcknowledged'], 'plan.installation');
@@ -831,7 +835,8 @@ async function runPlan(args, context) {
     const mcpUrl = await getFreeDesktopMcpUrl();
     const now = new Date();
     const plan = {
-      schema: PLAN_SCHEMA,
+      schema: candidate.agentBackgroundLaunch === 1 ? BACKGROUND_PLAN_SCHEMA : PLAN_SCHEMA,
+      ...(candidate.agentBackgroundLaunch === 1 ? {launchMode: 'agent-background'} : {}),
       createdAt: now.toISOString(),
       expiresAt: new Date(now.getTime() + PLAN_TTL_MILLISECONDS).toISOString(),
       operation: 'fresh-install',
@@ -893,6 +898,7 @@ async function runPlan(args, context) {
         configTarget: plan.connection.configTarget,
         mcpUrl: plan.connection.url,
         profile: 'default',
+        launchMode: plan.launchMode ?? 'foreground',
         publisher: 'unsigned',
         coveredMutations: ['download', 'per-user install', 'Desktop launch', 'non-secret client entry'],
         userPresence: ['SmartScreen or Unknown Publisher', 'first administrator', 'MCP secret entry', 'client trust'],
@@ -916,7 +922,7 @@ function parseStrictIso(value, label) {
 
 function validatePlan(plan, context) {
   assertPlanShape(plan);
-  if (plan.schema !== PLAN_SCHEMA || plan.operation !== 'fresh-install' || plan.platform !== 'windows-x64'
+  if (!([PLAN_SCHEMA, BACKGROUND_PLAN_SCHEMA].includes(plan.schema)) || (plan.schema === BACKGROUND_PLAN_SCHEMA && plan.launchMode !== 'agent-background') || plan.operation !== 'fresh-install' || plan.platform !== 'windows-x64'
       || plan.userSid !== context.identity.sid || plan.release.repository !== RELEASE_REPOSITORY
       || plan.release.sourceRepository !== SOURCE_REPOSITORY || !isDesktopMcpUrl(plan.connection.url)
       || plan.connection.profile !== 'default' || plan.installation.dataOwnershipAcknowledged !== true) {
@@ -1057,6 +1063,7 @@ async function runExecute(args, context) {
       },
     };
     validateWindowsCandidate(candidate, selected);
+    if ((candidate.agentBackgroundLaunch === 1) !== (plan.schema === BACKGROUND_PLAN_SCHEMA)) fail('invalid_candidate', 'Agent launch capability no longer matches the approved plan');
     if (candidate.revision !== plan.release.sourceRevision) fail('invalid_candidate', 'candidate source revision does not match the approved plan');
     await assertReleaseMatchesPlan(plan);
 
@@ -1079,7 +1086,7 @@ async function runExecute(args, context) {
     assertRegularPath(plan.installation.bootstrapPath, 'file', 'installed_receipt_invalid');
     assertRegularPath(runtime, 'file', 'installed_receipt_invalid');
     writeDesktopEndpointConfig(plan.installation.bootstrapPath, plan.connection.url, context);
-    const launched = childProcess.spawn(application, [], {
+    const launched = childProcess.spawn(application, plan.launchMode === 'agent-background' ? ['--jishudb-agent-background'] : [], {
       detached: true,
       env: sanitizedChildEnvironment(),
       stdio: 'ignore',
