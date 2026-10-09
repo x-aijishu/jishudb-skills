@@ -150,7 +150,7 @@ installing; distributing only its top-level `SKILL.md` omits required resources.
 The standalone `jishudb-search` and `jishudb-mcp-check` packages keep their existing
 authorized-connection prerequisites.
 
-For explicitly approved macOS prerelease rehearsals, setup 0.1.12 also accepts an
+For explicitly approved macOS prerelease rehearsals, setup 0.1.13 also accepts an
 exact candidate tag and source revision in `plan` mode. See the
 [candidate installation contract](skills/jishudb/references/installation-contract.md#explicit-macos-candidate-rehearsal).
 This is opt-in: task invocation alone still selects stable releases. Windows

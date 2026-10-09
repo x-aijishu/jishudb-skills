@@ -259,6 +259,7 @@ retain verification. Ordinary direct installation retains normal password setup.
 
 For a user-authorized macOS test only, add both `--candidate-tag` and
 `--candidate-revision` to the normal `plan` command. The tag must be exactly
+`vX.Y.Z` (the protected publication workflow's prerelease tag) or
 `vX.Y.Z-desktop-candidate.N` (positive N); the revision must be the approved full
 40-character lowercase source SHA. Do not infer either value, select a newer
 candidate, or use this mode because stable setup failed.

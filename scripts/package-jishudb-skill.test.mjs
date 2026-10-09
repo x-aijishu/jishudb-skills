@@ -29,7 +29,7 @@ test('Skill package is deterministic and binds every reviewed file', (t) => {
   const manifest = JSON.parse(fs.readFileSync(first.manifestPath, 'utf8'));
   assert.equal(manifest.product, 'jishudb-agent-skill');
   assert.equal(manifest.name, 'jishudb');
-  assert.equal(manifest.version, '0.1.12');
+  assert.equal(manifest.version, '0.1.13');
   assert.equal(manifest.publicationEligible, !manifest.sourceTreeDirty);
   assert.deepEqual(manifest.files.map((entry) => entry.path), [
     'SKILL.md',

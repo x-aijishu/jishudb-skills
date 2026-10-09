@@ -14,7 +14,7 @@ compatibility: >-
 metadata:
   author: jishudb
   bundled-setup: jishudb
-  version: "0.1.4"
+  version: "0.1.5"
   openclaw:
     homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/report-to-content-factory
 ---

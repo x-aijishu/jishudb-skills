@@ -119,7 +119,7 @@ test('explicit macOS candidate selection binds source, approval channel and exec
 test('candidate opt-in rejects unbound, unsigned, foreground and downgraded requests', () => {
   documents.prerelease = { ...release(), tag_name: 'v1.2.3-desktop-candidate.1', prerelease: true };
   for (const [tag, sha] of [
-    ['v1.2.3', revision], ['v1.2.3-desktop-candidate.0', revision],
+    ['v01.2.3', revision], ['v1.2.3-desktop-candidate.0', revision],
     ['v1.2.3-desktop-candidate.1/../../latest', revision],
     ['v1.2.3-desktop-candidate.1', ''], ['v1.2.3-desktop-candidate.1', 'main'],
   ]) assert.throws(() => helper.run(['select-candidate', 'prerelease', tag, sha]));
@@ -142,4 +142,21 @@ test('candidate opt-in rejects unbound, unsigned, foreground and downgraded requ
     p => { p.publisher = {identity: 'none', gatekeeper: 'manual-required'}; },
     p => { p.release.version = '1.2.4'; }, p => { p.release.sourceRevision = ''; },
   ]) { const changed = structuredClone(plan); mutate(changed); assert.throws(() => helper.validatePlan(changed)); }
+});
+
+
+test('protected publication version tags are candidate-only while prerelease is true', () => {
+  documents.versionTag = { ...release(), prerelease: true };
+  documents.onlyPrerelease = [documents.versionTag];
+  assert.throws(() => helper.selectRelease(['onlyPrerelease']), /no eligible/);
+  const selected = JSON.parse(helper.run(['select-candidate', 'versionTag', 'v1.2.3', revision]));
+  helper.validateCandidate(candidate(), selected);
+  const plan = helper.createPlan(selected, candidate(), ['501', '/Users/test/Applications/JishuDB.app', '/Users/test/Library/Application Support/JishuDB', 'WorkBuddy', '/Users/test/client.json', 'jishudb', 'http://127.0.0.1:8088/mcp']);
+  helper.validatePlan(plan); documents.versionPlan = plan;
+  assert.equal(plan.release.tag, 'v1.2.3');
+  assert.equal(plan.releaseChannel, 'candidate');
+  assert.equal(helper.run(['release-match', 'versionTag', 'versionPlan']), 'ok');
+  documents.versionTag.prerelease = false;
+  assert.throws(() => helper.run(['select-candidate', 'versionTag', 'v1.2.3', revision]));
+  assert.throws(() => helper.run(['release-match', 'versionTag', 'versionPlan']));
 });

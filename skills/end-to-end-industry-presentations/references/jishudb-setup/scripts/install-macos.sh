@@ -188,7 +188,7 @@ function selectRelease(paths) {
 
 // AI-generated opt-in rehearsal boundary: an exact tag and source are mandatory.
 function candidateRequest(tag, revision) {
-  requireString(tag, /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-desktop-candidate\.([1-9][0-9]{0,6})$/, 'candidate tag');
+  requireString(tag, /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-desktop-candidate\.[1-9][0-9]{0,6})?$/, 'candidate tag');
   requireString(revision, /^[0-9a-f]{40}$/, 'candidate source revision');
   return { tag, revision, version: tag.slice(1).split('-desktop-candidate.')[0] };
 }
