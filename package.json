@@ -6,8 +6,10 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test scripts/*.test.mjs && python3 -m unittest discover -s scripts -p \"test_*.py\"",
+    "test": "npm run check:setup && node --test scripts/*.test.mjs && python3 -m unittest discover -s scripts -p \"test_*.py\"",
     "package:jishudb-skill": "node scripts/package-jishudb-skill.mjs",
-    "package:jishudb-skillhub": "python3 scripts/package-jishudb-skillhub.py"
+    "package:jishudb-skillhub": "python3 scripts/package-jishudb-skillhub.py",
+    "bundle:setup": "python3 scripts/bundle-task-setup.py",
+    "check:setup": "python3 scripts/bundle-task-setup.py --check"
   }
 }

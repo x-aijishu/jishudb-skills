@@ -7,10 +7,11 @@ description: >-
   summaries in JishuDB from an authorized connector or local export. Preserve
   source associations and compare imported meetings with cited project evidence;
   not for recording-device control.
-compatibility: Requires authorized JishuDB MCP write tools and either authorized Plaud MCP source tools or an explicitly selected local export. Audio additionally requires HTTP direct upload, the advertised JishuDB audio capability, and a host able to transfer actual binary bytes. The identity helper uses Node.js 20 or later without dependencies.
+compatibility: Requires authorized JishuDB MCP write tools and either authorized Plaud MCP source tools or an explicitly selected local export. Audio additionally requires HTTP direct upload, the advertised JishuDB audio capability, and a host able to transfer actual binary bytes. The identity helper uses Node.js 20 or later without dependencies. JishuDB setup is included in this package.
 metadata:
   author: jishudb
-  version: "0.1.1"
+  bundled-setup: jishudb
+  version: "0.1.2"
   openclaw:
     homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/jishudb-plaud-import
 ---
@@ -70,13 +71,21 @@ are the unprefixed vendor and JishuDB names.
 
 ### Connect and select
 
-1. Locate the JishuDB connector and call `kb_get_capabilities`. Require the
-   deployed `jishudb-mcp-v2` contract and the necessary write tools. If setup
-   is missing, load the official companion `jishudb` setup Skill and its
-   installation contract through the host. If the companion is unavailable,
-   request that dependency; do not invent installer or client-configuration
-   commands. Preserve its OS, administrator, endpoint, trust, and privilege
-   gates. Declined or unavailable setup blocks this packaged workflow.
+1. Reuse a working JishuDB MCP connection for the user's intended service.
+   If missing or unusable, pause the task and follow the included
+   [installation and connection guide](references/jishudb-setup/setup.md).
+   Its platform helpers and recovery instructions are inside this package;
+   no separate `jishudb` Skill or ClawHub download is required. Resolve setup
+   paths and run helpers from `references/jishudb-setup/`, not the task root.
+   Diagnose the observed failure first. Honor an already selected local or
+   remote target; clarify an unresolved target before installing anything.
+   Reuse existing installation approval. When this task needs writes, obtain
+   that scope explicitly in the initial OAuth flow instead of first creating
+   a read-only grant and immediately requesting a second authorization.
+   Preserve OS, client-trust, agreement and device-owner prompts for the user.
+   Resume only after the real client connection and required runtime are ready.
+   Pending user action is `USER_ACTION_REQUIRED`; unsupported or declined
+   setup is `BLOCKED`. Do not continue using a local-only persistence substitute.
 2. Call `kb_list`, resolve the actual selected KB ID, and check
    `kb_get_config` and live tool schemas for document limits. Use `kb_create`
    only if the user approves creating the named destination. Do not guess a

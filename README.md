@@ -70,8 +70,9 @@ Every package lives under `skills/<name>/`. Its `SKILL.md` is the entrypoint.
 Choose by the primary deliverable, not a shared keyword. For explicitly
 requested multi-artifact work, combine the relevant scopes without dropping
 deliverables. These routes do not authorize installation, writes, publishing,
-or recurring runs. Load companion skills through the host's supported loader
-only when needed; package names are not assumed sibling filesystem dependencies.
+or recurring runs. Task packages include setup resources under
+`references/jishudb-setup/`; use them only when a working connection is absent.
+Other companion skills still require the host's supported loader.
 
 | 需求区别 / Distinction | 首选 Skill / Preferred route |
 | --- | --- |
@@ -120,9 +121,34 @@ Use the host's supported Skill loader and keep each full package. Copying only `
 
 ## JishuDB Dependency
 
-任务型 Skills 使用 JishuDB 作为知识和持久化后端。已有授权连接时直接复用；需要安装或修复连接时，同时加载 `jishudb` Skill。
+任务型 Skills 已内置 JishuDB 安装连接资源。已有授权连接时直接复用；没有连接时使用包内指南，不再要求另装 `jishudb` Skill 或从 ClawHub 下载依赖。
 
-Task workflows use JishuDB as their knowledge and persistence backend. Reuse an authorized connection or load the companion `jishudb` Skill when setup is needed.
+Task workflows use JishuDB as their knowledge and persistence backend. All 11
+task packages include the setup guide, connection recovery, installation contract,
+and platform helpers under `references/jishudb-setup/`. Installing just one task
+package is sufficient to access these resources; no separate setup Skill or
+ClawHub fetch is required. Reuse a working connection; otherwise follow the
+included guide, complete approved installation and user-operated OAuth, verify
+runtime readiness, then resume the task. This still requires a supported local
+host and an eligible Desktop release. A cloud Agent cannot install a user's PC.
+
+The canonical implementation remains `skills/jishudb/`. Bundles contain generated
+copies, not independently maintained installers. The macOS helper is rendered as
+`.sh` and invoked with `zsh`, using the existing SkillHub distribution renderer.
+Each bundle records its source Skill version and file hashes; it has no nested
+`SKILL.md` to confuse host discovery. To update shared setup resources:
+
+```sh
+npm run bundle:setup
+npm run check:setup
+npm test
+```
+
+Commit regenerated bundles with changes to canonical setup resources. CI rejects
+missing or stale copies. Preserve the entire task directory when packaging or
+installing; distributing only its top-level `SKILL.md` omits required resources.
+The standalone `jishudb-search` and `jishudb-mcp-check` packages keep their existing
+authorized-connection prerequisites.
 
 ## Permissions and Boundaries / 权限与边界
 

@@ -10,10 +10,11 @@ description: >-
 compatibility: >-
   WorkBuddy or another Agent Skills-compatible host with JishuDB MCP, permitted
   web access, approved local file output, and image or graphic generation that
-  exports usable cover files. Setup uses the official jishudb companion Skill.
+  exports usable cover files. JishuDB setup is included in this package.
 metadata:
   author: jishudb
-  version: "0.1.1"
+  bundled-setup: jishudb
+  version: "0.1.2"
   openclaw:
     homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/xiaohongshu-content-factory
 ---
@@ -60,13 +61,21 @@ finished covers are not required, use `report-to-content-factory`.
    or inaccessible remote URLs do not satisfy the deliverable. If generation
    or export is missing, disclose it as `BLOCKED` before promising the pack.
    Do not impose a paid service, foreign API, or new account.
-3. Reuse the existing JishuDB MCP connection. If setup is needed, have the host
-   load the official `jishudb` companion Skill and that package's
-   `references/installation-contract.md` using its supported Skill mechanism.
-   Do not invent a Skill invocation tool or source-tree path, duplicate
-   installer commands, guess client config paths, scan ports, or copy secrets.
-   Preserve OS, administrator, client-trust, and authorization gates. Missing
-   companion support or declined setup means `BLOCKED`, not local-only mode.
+3. Reuse a working JishuDB MCP connection for the user's intended service.
+   If missing or unusable, pause the task and follow the included
+   [installation and connection guide](references/jishudb-setup/setup.md).
+   Its platform helpers and recovery instructions are inside this package;
+   no separate `jishudb` Skill or ClawHub download is required. Resolve setup
+   paths and run helpers from `references/jishudb-setup/`, not the task root.
+   Diagnose the observed failure first. Honor an already selected local or
+   remote target; clarify an unresolved target before installing anything.
+   Reuse existing installation approval. When this task needs writes, obtain
+   that scope explicitly in the initial OAuth flow instead of first creating
+   a read-only grant and immediately requesting a second authorization.
+   Preserve OS, client-trust, agreement and device-owner prompts for the user.
+   Resume only after the real client connection and required runtime are ready.
+   Pending user action is `USER_ACTION_REQUIRED`; unsupported or declined
+   setup is `BLOCKED`. Do not continue using a local-only persistence substitute.
 4. Inspect live `tools/list` schemas and call `kb_get_capabilities({})`.
    Record actual service, contract, profile, transport, tools needed, and
    upload limits without freezing a tool count. Use `kb_read_handbook({})`

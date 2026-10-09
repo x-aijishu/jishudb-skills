@@ -10,10 +10,11 @@ description: >-
 compatibility: >-
   WorkBuddy or another Agent Skills-compatible host with JishuDB MCP, public or
   authorized browsing/search, and approved local text output. Image findings
-  require available OCR/vision. Setup uses the official jishudb companion Skill.
+  require available OCR/vision. JishuDB setup is included in this package.
 metadata:
   author: jishudb
-  version: "0.1.2"
+  bundled-setup: jishudb
+  version: "0.1.3"
   openclaw:
     homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/research-report-hunter
 ---
@@ -57,20 +58,21 @@ Read this package's [evidence contract](references/evidence-contract.md) before 
    and up to eight useful reports. A decision, publisher preference, date
    range, or full-report requirement is optional. Clarify genuine topic or
    access ambiguity; do not require uploads, subscriptions, or an account.
-2. Reuse a working host JishuDB MCP connection for the user's intended service.
-   When unavailable, pause discovery and generation and explain the observed
-   connection failure first; a saved remote URL is not proof the user wants it.
-   Load the official `jishudb` companion Skill through the supported host loader
-   and follow its connection recovery workflow. Let the user choose the existing
-   local installation, the intended remote service, or postponing the task when
-   the target is unresolved. Reuse a choice already made in this conversation.
-   If the companion is missing, offer installation through the host's supported
-   Skill mechanism or manual connection in host settings. Do not guess paths,
-   copy secrets, scan ports, invent invocation tools, or duplicate installers.
-   An available service does not require reinstalling Desktop or the companion
-   just to use a working host connection. A pending choice or browser consent is
-   `USER_ACTION_REQUIRED`; unsupported or declined recovery is `BLOCKED`.
-   Do not continue in local-only mode and discover the missing backend at the end.
+2. Reuse a working JishuDB MCP connection for the user's intended service.
+   If missing or unusable, pause the task and follow the included
+   [installation and connection guide](references/jishudb-setup/setup.md).
+   Its platform helpers and recovery instructions are inside this package;
+   no separate `jishudb` Skill or ClawHub download is required. Resolve setup
+   paths and run helpers from `references/jishudb-setup/`, not the task root.
+   Diagnose the observed failure first. Honor an already selected local or
+   remote target; clarify an unresolved target before installing anything.
+   Reuse existing installation approval. When this task needs writes, obtain
+   that scope explicitly in the initial OAuth flow instead of first creating
+   a read-only grant and immediately requesting a second authorization.
+   Preserve OS, client-trust, agreement and device-owner prompts for the user.
+   Resume only after the real client connection and required runtime are ready.
+   Pending user action is `USER_ACTION_REQUIRED`; unsupported or declined
+   setup is `BLOCKED`. Do not continue using a local-only persistence substitute.
 3. Inspect live `tools/list` schemas and call `kb_get_capabilities({})`.
    Record the actual service, contract, transport, profile, required tools,
    and upload limits, not a frozen tool count. For unfamiliar behavior use
