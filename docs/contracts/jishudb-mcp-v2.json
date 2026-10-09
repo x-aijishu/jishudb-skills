@@ -1,0 +1,4874 @@
+{
+  "schemaVersion": 1,
+  "artifact": "jishudb-mcp-v2",
+  "profile": "jishudb",
+  "toolContractVersion": "jishudb-mcp-v2",
+  "contractDigest": "709a2c7dd407c6303ef56b209dacd172e7e8c123bdc5492f578b610eb791544a",
+  "transports": [
+    {
+      "type": "stdio",
+      "protocolVersions": [
+        "2026-07-28",
+        "2024-11-05"
+      ],
+      "authentication": "process-boundary",
+      "enabledByDefault": true
+    },
+    {
+      "type": "streamable-http",
+      "protocolVersions": [
+        "2026-07-28",
+        "2025-11-25"
+      ],
+      "authentication": "bearer",
+      "acceptedBearerTypes": [
+        "service",
+        "mcp-scoped"
+      ],
+      "enabledByDefault": false
+    }
+  ],
+  "presentation": {
+    "requiredTools": [
+      "kb_list",
+      "kb_list_documents",
+      "kb_search",
+      "kb_get_document",
+      "kb_list_document_chunks"
+    ],
+    "optionalTools": [
+      "kb_read_document_raw"
+    ],
+    "rawDocumentFallback": "kb_list_document_chunks"
+  },
+  "tools": [
+    {
+      "name": "kb_list",
+      "title": "List Knowledge Bases",
+      "description": "Authoritatively list current knowledge bases. Call this in the current turn for knowledge-base names, IDs, or counts; do not infer them from search results or prior context. `documents` is the indexed document/file count and `chunks` is the indexed chunk count (not file count).",
+      "profiles": [
+        "default",
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "knowledgeBases": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "chunks": {
+                  "description": "Current indexed chunk count; not a file count.",
+                  "type": "integer"
+                },
+                "createdAt": {
+                  "type": "integer"
+                },
+                "description": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "documents": {
+                  "description": "Current indexed document/file count.",
+                  "type": "integer"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "unavailableReason": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "usable": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "description",
+                "documents",
+                "chunks",
+                "createdAt",
+                "usable",
+                "unavailableReason"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "knowledgeBases"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "kb_get_capabilities",
+      "title": "Get Service Capabilities",
+      "description": "Read service capabilities plus the native MCP contract summary without secrets.",
+      "profiles": [
+        "default",
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "mcp": {
+            "additionalProperties": false,
+            "properties": {
+              "profile": {
+                "type": "string"
+              },
+              "protocolVersion": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              },
+              "runtimePreparation": {
+                "additionalProperties": false,
+                "properties": {
+                  "allowed": {
+                    "type": "boolean"
+                  },
+                  "pollAfterSeconds": {
+                    "type": "integer"
+                  },
+                  "supported": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "supported",
+                  "allowed",
+                  "pollAfterSeconds"
+                ],
+                "type": "object"
+              },
+              "serverVersion": {
+                "type": "string"
+              },
+              "toolContractVersion": {
+                "type": "string"
+              },
+              "tools": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "transport": {
+                "type": "string"
+              },
+              "upload": {
+                "additionalProperties": false,
+                "properties": {
+                  "audio": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "compressedAudioReady": {
+                        "type": "boolean"
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "extensions": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "maxDurationMs": {
+                        "type": "integer"
+                      },
+                      "maxSourceBytes": {
+                        "type": "integer"
+                      },
+                      "modes": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "speechReady": {
+                        "type": "boolean"
+                      },
+                      "storageBytes": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "enabled",
+                      "modes",
+                      "extensions",
+                      "speechReady",
+                      "compressedAudioReady",
+                      "maxSourceBytes",
+                      "maxDurationMs",
+                      "storageBytes"
+                    ],
+                    "type": "object"
+                  },
+                  "directUpload": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "expiresInSeconds": {
+                        "type": "integer"
+                      },
+                      "maxUploadBytes": {
+                        "type": "integer"
+                      },
+                      "method": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "enabled",
+                      "method",
+                      "maxUploadBytes",
+                      "expiresInSeconds"
+                    ],
+                    "type": "object"
+                  },
+                  "modes": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "pathUpload": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "modes",
+                  "pathUpload",
+                  "directUpload",
+                  "audio"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "transport",
+              "protocolVersion",
+              "profile",
+              "toolContractVersion",
+              "serverVersion",
+              "revision",
+              "tools",
+              "upload"
+            ],
+            "type": "object"
+          },
+          "service": {
+            "additionalProperties": false,
+            "properties": {
+              "basePath": {
+                "type": "string"
+              },
+              "contractVersion": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              },
+              "serviceVersion": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "contractVersion",
+              "serviceVersion",
+              "revision",
+              "basePath"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "service",
+          "mcp"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "kb_create",
+      "title": "Create Knowledge Base",
+      "description": "Create a new knowledge base.",
+      "profiles": [
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "description": "Optional KB description",
+            "maxLength": 4096,
+            "minLength": 1,
+            "type": "string"
+          },
+          "id": {
+            "description": "Optional explicit KB id",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "description": "Human-readable KB name",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAt": {
+            "type": "integer"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "kb_get",
+      "title": "Get Knowledge Base",
+      "description": "Authoritatively read one knowledge base's current metadata, counts, and retrieval config summary. Do not use it to enumerate filenames: call kb_list_documents for that. `jobCount` counts ingest attempts, including repeated processing of one document, so it is not a file count.",
+      "profiles": [
+        "default",
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "kbId": {
+            "description": "Optional KB id; defaults to the configured default KB",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "chunks": {
+            "description": "Current indexed chunk count; not a file count.",
+            "type": "integer"
+          },
+          "config": {
+            "additionalProperties": false,
+            "properties": {},
+            "type": "object"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "documentCount": {
+            "description": "Current indexed document/file count.",
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "jobCount": {
+            "description": "Ingest attempt count; repeated processing can create multiple jobs for one document, so this is not a file count.",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "createdAt",
+          "documentCount",
+          "chunks",
+          "jobCount",
+          "config"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "kb_search",
+      "title": "Search Knowledge Base",
+      "description": "Search a knowledge base for chunks relevant to a semantic question and ground the answer in the returned passages. Search results are not a complete inventory: never use them to claim exact filenames or file counts; call kb_list_documents for inventory questions.",
+      "profiles": [
+        "default",
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "kbId": {
+            "description": "Optional KB id; defaults to the configured default KB",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "query": {
+            "description": "The user question, in their original language",
+            "maxLength": 16384,
+            "minLength": 1,
+            "type": "string"
+          },
+          "topK": {
+            "description": "Optional number of chunks to retrieve, 1-20",
+            "maximum": 20,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "results": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "chunkId": {
+                  "type": "integer"
+                },
+                "documentId": {
+                  "type": "string"
+                },
+                "documentTitle": {
+                  "type": "string"
+                },
+                "page": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "score": {
+                  "type": "number"
+                },
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "chunkId",
+                "documentId",
+                "documentTitle",
+                "page",
+                "text",
+                "score"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "kb_upload",
+      "title": "Upload Document",
+      "description": "Upload and index exactly one source into a specific knowledge base: either contentBase64 bytes or an absolute host path when pathUpload is advertised. Use this write path for drive-resolved local files.",
+      "profiles": [
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "required": [
+              "kbId",
+              "path"
+            ]
+          },
+          {
+            "required": [
+              "kbId",
+              "filename",
+              "contentBase64"
+            ]
+          }
+        ],
+        "properties": {
+          "contentBase64": {
+            "contentEncoding": "base64",
+            "description": "Base64-encoded document bytes for remote clients. Exactly one of contentBase64 or path is required.",
+            "maxLength": 41943040,
+            "minLength": 1,
+            "type": "string"
+          },
+          "externalAssetId": {
+            "description": "Optional opaque source association shared with related representations; use letters, digits, dots, underscores, colons and hyphens, not URLs, paths or credentials",
+            "maxLength": 256,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "type": "string"
+          },
+          "filename": {
+            "description": "Filename for contentBase64 uploads; required when contentBase64 is used",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "kbId": {
+            "description": "Target KB id; required for writes",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "mime": {
+            "description": "Optional MIME type for contentBase64 uploads",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "path": {
+            "description": "Absolute host path under an allowed upload root; only available when pathUpload is advertised. Exactly one of path or contentBase64 is required.",
+            "maxLength": 4096,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "kbId"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "chunks": {
+            "type": "integer"
+          },
+          "document": {
+            "additionalProperties": false,
+            "properties": {
+              "bytes": {
+                "type": "integer"
+              },
+              "createdAt": {
+                "type": "integer"
+              },
+              "externalAssetId": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "kbId": {
+                "type": "string"
+              },
+              "mime": {
+                "type": "string"
+              },
+              "origin": {
+                "type": "string"
+              },
+              "sha256": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "kbId",
+              "title",
+              "mime",
+              "sha256",
+              "bytes",
+              "status",
+              "createdAt",
+              "origin"
+            ],
+            "type": "object"
+          },
+          "parents": {
+            "type": "integer"
+          },
+          "warningCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "document",
+          "parents",
+          "chunks",
+          "warningCode"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "kb_prepare_upload",
+      "title": "Prepare Direct Upload",
+      "description": "Prepare a short-lived direct binary upload. The MCP client must read the local file and PUT its raw bytes to the returned upload URL. Audio requires the advertised upload.audio capability and remains asynchronous; kb_upload contentBase64 is a compatibility fallback for supported documents, not audio.",
+      "profiles": [
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "externalAssetId": {
+            "description": "Optional opaque source association shared with related representations; never supply a signed URL, local path or credential",
+            "maxLength": 256,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "type": "string"
+          },
+          "filename": {
+            "description": "Supported filename for the local file; the server never reads this path",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "idempotencyKey": {
+            "description": "Optional key for safe preparation retries",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[\\x21-\\x7e]+$",
+            "type": "string"
+          },
+          "kbId": {
+            "description": "Target KB id; required for writes",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "mime": {
+            "description": "Optional advisory MIME type",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "sha256": {
+            "description": "Optional lowercase SHA-256 digest of the local file",
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "sizeBytes": {
+            "description": "Exact local file size in bytes",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kbId",
+          "filename",
+          "sizeBytes"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "clientItemId": {
+                "type": "string"
+              },
+              "expiresAt": {
+                "type": "string"
+              },
+              "headers": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "value"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "maxBytes": {
+                "type": "integer"
+              },
+              "method": {
+                "type": "string"
+              },
+              "uploadId": {
+                "type": "string"
+              },
+              "uploadUrl": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "uploadId",
+              "uploadUrl",
+              "method",
+              "headers",
+              "expiresAt",
+              "maxBytes",
+              "clientItemId"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "clientItemId": {
+                "type": "string"
+              },
+              "job": {
+                "additionalProperties": false,
+                "properties": {
+                  "attempts": {
+                    "type": "integer"
+                  },
+                  "bytes": {
+                    "type": "integer"
+                  },
+                  "createdAt": {
+                    "type": "integer"
+                  },
+                  "documentId": {
+                    "type": "string"
+                  },
+                  "errorCode": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "filename": {
+                    "type": "string"
+                  },
+                  "finishedAt": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "kbId": {
+                    "type": "string"
+                  },
+                  "mime": {
+                    "type": "string"
+                  },
+                  "progressCurrent": {
+                    "type": "integer"
+                  },
+                  "progressTotal": {
+                    "type": "integer"
+                  },
+                  "sha256": {
+                    "type": "string"
+                  },
+                  "stage": {
+                    "type": "string"
+                  },
+                  "startedAt": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "updatedAt": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "id",
+                  "documentId",
+                  "kbId",
+                  "filename",
+                  "mime",
+                  "sha256",
+                  "bytes",
+                  "status",
+                  "stage",
+                  "progressCurrent",
+                  "progressTotal",
+                  "attempts",
+                  "createdAt",
+                  "updatedAt",
+                  "startedAt",
+                  "finishedAt",
+                  "errorCode"
+                ],
+                "type": "object"
+              },
+              "replayed": {
+                "type": "boolean"
+              },
+              "uploadId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "uploadId",
+              "clientItemId",
+              "job",
+              "replayed"
+            ],
+            "type": "object"
+          }
+        ],
+        "properties": {
+          "clientItemId": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string"
+          },
+          "headers": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "value"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "job": {
+            "additionalProperties": false,
+            "properties": {
+              "attempts": {
+                "type": "integer"
+              },
+              "bytes": {
+                "type": "integer"
+              },
+              "createdAt": {
+                "type": "integer"
+              },
+              "documentId": {
+                "type": "string"
+              },
+              "errorCode": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "filename": {
+                "type": "string"
+              },
+              "finishedAt": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "id": {
+                "type": "string"
+              },
+              "kbId": {
+                "type": "string"
+              },
+              "mime": {
+                "type": "string"
+              },
+              "progressCurrent": {
+                "type": "integer"
+              },
+              "progressTotal": {
+                "type": "integer"
+              },
+              "sha256": {
+                "type": "string"
+              },
+              "stage": {
+                "type": "string"
+              },
+              "startedAt": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "status": {
+                "type": "string"
+              },
+              "updatedAt": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "id",
+              "documentId",
+              "kbId",
+              "filename",
+              "mime",
+              "sha256",
+              "bytes",
+              "status",
+              "stage",
+              "progressCurrent",
+              "progressTotal",
+              "attempts",
+              "createdAt",
+              "updatedAt",
+              "startedAt",
+              "finishedAt",
+              "errorCode"
+            ],
+            "type": "object"
+          },
+          "maxBytes": {
+            "type": "integer"
+          },
+          "method": {
+            "type": "string"
+          },
+          "replayed": {
+            "type": "boolean"
+          },
+          "uploadId": {
+            "type": "string"
+          },
+          "uploadUrl": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "kb_list_documents",
+      "title": "List Documents",
+      "description": "Authoritatively list current indexed documents in one knowledge base. For 'which files are in the KB?', exact filenames, or exact file counts, MUST call this tool in the current turn, follow nextCursor until complete, and answer only from the returned documents. Never add names inferred from search results, document contents, memory, or job counts.",
+      "profiles": [
+        "default",
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "cursor": {
+            "description": "Optional opaque cursor from the previous result",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "kbId": {
+            "description": "Optional KB id; defaults to the configured default KB",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "limit": {
+            "description": "Optional page size, max 100; omit with cursor for the default page size",
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "documents": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "bytes": {
+                  "type": "integer"
+                },
+                "createdAt": {
+                  "type": "integer"
+                },
+                "externalAssetId": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "kbId": {
+                  "type": "string"
+                },
+                "mime": {
+                  "type": "string"
+                },
+                "origin": {
+                  "type": "string"
+                },
+                "sha256": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "kbId",
+                "title",
+                "mime",
+                "sha256",
+                "bytes",
+                "status",
+                "createdAt",
+                "origin"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "documents"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "kb_get_document",
+      "title": "Get Document",
+      "description": "Authoritatively read one current document's metadata and derived counts, including queued documents. Audio documents include retained-original, transcription and indexing status separately. Call this for exact document identity or status instead of inferring it from search passages. `jobCount` counts processing attempts for this document, not documents.",
+      "profiles": [
+        "default",
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "documentId": {
+            "description": "Document id to inspect",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "kbId": {
+            "description": "Optional KB id; defaults to the configured default KB",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "documentId"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "audio": {
+            "additionalProperties": false,
+            "properties": {
+              "durationMs": {
+                "description": "Measured duration in milliseconds, or zero until audio validation completes.",
+                "type": "integer"
+              },
+              "errorCode": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "format": {
+                "type": "string"
+              },
+              "indexErrorCode": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "indexStatus": {
+                "type": "string"
+              },
+              "jobId": {
+                "type": "string"
+              },
+              "jobStatus": {
+                "type": "string"
+              },
+              "originalBytes": {
+                "type": "integer"
+              },
+              "originalSaved": {
+                "type": "boolean"
+              },
+              "originalSha256": {
+                "type": "string"
+              },
+              "playbackReady": {
+                "type": "boolean"
+              },
+              "state": {
+                "type": "string"
+              },
+              "transcriptReady": {
+                "type": "boolean"
+              },
+              "transcriptRevision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "format",
+              "state",
+              "originalSaved",
+              "originalBytes",
+              "originalSha256",
+              "durationMs",
+              "playbackReady",
+              "transcriptReady",
+              "transcriptRevision",
+              "jobId",
+              "jobStatus",
+              "indexStatus",
+              "indexErrorCode",
+              "errorCode"
+            ],
+            "type": "object"
+          },
+          "bytes": {
+            "type": "integer"
+          },
+          "chunkCount": {
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "externalAssetId": {
+            "type": "string"
+          },
+          "faqCount": {
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "jobCount": {
+            "description": "Processing attempt count for this document; not a document count.",
+            "type": "integer"
+          },
+          "kbId": {
+            "type": "string"
+          },
+          "mime": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kbId",
+          "title",
+          "mime",
+          "sha256",
+          "bytes",
+          "status",
+          "createdAt",
+          "origin",
+          "chunkCount",
+          "faqCount",
+          "jobCount"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "kb_list_document_chunks",
+      "title": "List Document Chunks",
+      "description": "Authoritatively list indexed chunks for one document; chunk text is capped. Use it for chunk/page inspection, not to infer the knowledge base's file inventory.",
+      "profiles": [
+        "default",
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "documentId": {
+            "description": "Document id to inspect",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "kbId": {
+            "description": "Optional KB id; defaults to the configured default KB",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "documentId"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "chunks": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "chunkIndex": {
+                  "type": "integer"
+                },
+                "id": {
+                  "type": "integer"
+                },
+                "page": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "text": {
+                  "type": "string"
+                },
+                "truncated": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "chunkIndex",
+                "page",
+                "text",
+                "truncated"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "chunks"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "kb_read_document_text",
+      "title": "Read Extracted Document Text",
+      "description": "Authoritatively read extracted/indexed text for one document, including PDF and OCR output. Call this when the user asks what a specific document says instead of reconstructing it from search snippets. Use this for parsed documents instead of the raw file reader. Output is capped.",
+      "profiles": [
+        "default",
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "documentId": {
+            "description": "Document id to read",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "kbId": {
+            "description": "Optional KB id; defaults to the configured default KB",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "documentId"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "characters": {
+            "type": "integer"
+          },
+          "documentId": {
+            "type": "string"
+          },
+          "maxChars": {
+            "type": "integer"
+          },
+          "mime": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "documentId",
+          "title",
+          "mime",
+          "text",
+          "characters",
+          "truncated",
+          "maxChars"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "kb_read_document_raw",
+      "title": "Read Original Text File",
+      "description": "Read the original stored UTF-8 text file only; binary files are rejected. Use kb_read_document_text for extracted PDF, Office, image, or OCR content. Output is capped.",
+      "profiles": [
+        "default",
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "documentId": {
+            "description": "Document id to read",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "kbId": {
+            "description": "Optional KB id; defaults to the configured default KB",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "documentId"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "characters": {
+            "type": "integer"
+          },
+          "documentId": {
+            "type": "string"
+          },
+          "maxChars": {
+            "type": "integer"
+          },
+          "mime": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "documentId",
+          "title",
+          "mime",
+          "text",
+          "characters",
+          "truncated",
+          "maxChars"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "kb_list_document_faq",
+      "title": "List Document FAQs",
+      "description": "List generated FAQ suggestions for a document.",
+      "profiles": [
+        "default",
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "documentId": {
+            "description": "Document id to inspect",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "kbId": {
+            "description": "Optional KB id; defaults to the configured default KB",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "documentId"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "faqs": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "question": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "question"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "faqs"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "kb_reindex_document",
+      "title": "Reindex Document",
+      "description": "Rebuild a document from stored raw content, or use strategy auto to reuse existing chunks when only embeddings are stale. Explicit document confirmation is required.",
+      "profiles": [
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmDocumentId": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "documentId": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "kbId": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "strategy": {
+            "enum": [
+              "auto",
+              "full"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "kbId",
+          "documentId",
+          "confirmDocumentId"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "chunks": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "document": {
+            "additionalProperties": false,
+            "properties": {
+              "audio": {
+                "additionalProperties": false,
+                "properties": {
+                  "durationMs": {
+                    "description": "Measured duration in milliseconds, or zero until audio validation completes.",
+                    "type": "integer"
+                  },
+                  "errorCode": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "format": {
+                    "type": "string"
+                  },
+                  "indexErrorCode": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "indexStatus": {
+                    "type": "string"
+                  },
+                  "jobId": {
+                    "type": "string"
+                  },
+                  "jobStatus": {
+                    "type": "string"
+                  },
+                  "originalBytes": {
+                    "type": "integer"
+                  },
+                  "originalSaved": {
+                    "type": "boolean"
+                  },
+                  "originalSha256": {
+                    "type": "string"
+                  },
+                  "playbackReady": {
+                    "type": "boolean"
+                  },
+                  "state": {
+                    "type": "string"
+                  },
+                  "transcriptReady": {
+                    "type": "boolean"
+                  },
+                  "transcriptRevision": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "format",
+                  "state",
+                  "originalSaved",
+                  "originalBytes",
+                  "originalSha256",
+                  "durationMs",
+                  "playbackReady",
+                  "transcriptReady",
+                  "transcriptRevision",
+                  "jobId",
+                  "jobStatus",
+                  "indexStatus",
+                  "indexErrorCode",
+                  "errorCode"
+                ],
+                "type": "object"
+              },
+              "bytes": {
+                "type": "integer"
+              },
+              "chunkCount": {
+                "type": "integer"
+              },
+              "createdAt": {
+                "type": "integer"
+              },
+              "externalAssetId": {
+                "type": "string"
+              },
+              "faqCount": {
+                "type": "integer"
+              },
+              "id": {
+                "type": "string"
+              },
+              "jobCount": {
+                "description": "Processing attempt count for this document; not a document count.",
+                "type": "integer"
+              },
+              "kbId": {
+                "type": "string"
+              },
+              "mime": {
+                "type": "string"
+              },
+              "origin": {
+                "type": "string"
+              },
+              "sha256": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "kbId",
+              "title",
+              "mime",
+              "sha256",
+              "bytes",
+              "status",
+              "createdAt",
+              "origin",
+              "chunkCount",
+              "faqCount",
+              "jobCount"
+            ],
+            "type": "object"
+          },
+          "faqRegeneration": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "parents": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "removedChunks": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "sourceGeneration": {
+            "type": "string"
+          },
+          "strategy": {
+            "type": "string"
+          },
+          "vectors": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "warningCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "strategy",
+          "action",
+          "document",
+          "parents",
+          "chunks",
+          "vectors",
+          "removedChunks",
+          "faqRegeneration",
+          "sourceGeneration",
+          "warningCode"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "kb_import_url",
+      "title": "Import URL",
+      "description": "Fetch a readable remote URL into a specific KB; this usually enqueues ingest work, so follow progress with kb_get_job or kb_list_jobs.",
+      "profiles": [
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "async": {
+            "description": "Whether to enqueue async ingest; defaults to true",
+            "type": "boolean"
+          },
+          "batchId": {
+            "description": "Optional batch id",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "clientItemId": {
+            "description": "Optional caller item id",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "externalAssetId": {
+            "description": "Optional external asset id",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "idempotencyKey": {
+            "description": "Optional idempotency key for safe retries",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "kbId": {
+            "description": "Target KB id; required for writes",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "origin": {
+            "description": "Optional provenance origin",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "sourcePath": {
+            "description": "Optional caller-visible source path",
+            "maxLength": 4096,
+            "minLength": 1,
+            "type": "string"
+          },
+          "url": {
+            "description": "User-provided URL to import",
+            "format": "uri",
+            "maxLength": 2048,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "kbId",
+          "url"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "chunks": {
+                "type": "integer"
+              },
+              "document": {
+                "additionalProperties": false,
+                "properties": {
+                  "bytes": {
+                    "type": "integer"
+                  },
+                  "createdAt": {
+                    "type": "integer"
+                  },
+                  "externalAssetId": {
+                    "type": "string"
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "kbId": {
+                    "type": "string"
+                  },
+                  "mime": {
+                    "type": "string"
+                  },
+                  "origin": {
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "kbId",
+                  "title",
+                  "mime",
+                  "sha256",
+                  "bytes",
+                  "status",
+                  "createdAt",
+                  "origin"
+                ],
+                "type": "object"
+              },
+              "parents": {
+                "type": "integer"
+              },
+              "warningCode": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "document",
+              "parents",
+              "chunks",
+              "warningCode"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "job": {
+                "additionalProperties": false,
+                "properties": {
+                  "attempts": {
+                    "type": "integer"
+                  },
+                  "bytes": {
+                    "type": "integer"
+                  },
+                  "createdAt": {
+                    "type": "integer"
+                  },
+                  "documentId": {
+                    "type": "string"
+                  },
+                  "errorCode": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "filename": {
+                    "type": "string"
+                  },
+                  "finishedAt": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "kbId": {
+                    "type": "string"
+                  },
+                  "mime": {
+                    "type": "string"
+                  },
+                  "progressCurrent": {
+                    "type": "integer"
+                  },
+                  "progressTotal": {
+                    "type": "integer"
+                  },
+                  "sha256": {
+                    "type": "string"
+                  },
+                  "stage": {
+                    "type": "string"
+                  },
+                  "startedAt": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "updatedAt": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "id",
+                  "documentId",
+                  "kbId",
+                  "filename",
+                  "mime",
+                  "sha256",
+                  "bytes",
+                  "status",
+                  "stage",
+                  "progressCurrent",
+                  "progressTotal",
+                  "attempts",
+                  "createdAt",
+                  "updatedAt",
+                  "startedAt",
+                  "finishedAt",
+                  "errorCode"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "job"
+            ],
+            "type": "object"
+          }
+        ],
+        "properties": {
+          "chunks": {
+            "type": "integer"
+          },
+          "document": {
+            "additionalProperties": false,
+            "properties": {
+              "bytes": {
+                "type": "integer"
+              },
+              "createdAt": {
+                "type": "integer"
+              },
+              "externalAssetId": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "kbId": {
+                "type": "string"
+              },
+              "mime": {
+                "type": "string"
+              },
+              "origin": {
+                "type": "string"
+              },
+              "sha256": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "kbId",
+              "title",
+              "mime",
+              "sha256",
+              "bytes",
+              "status",
+              "createdAt",
+              "origin"
+            ],
+            "type": "object"
+          },
+          "job": {
+            "additionalProperties": false,
+            "properties": {
+              "attempts": {
+                "type": "integer"
+              },
+              "bytes": {
+                "type": "integer"
+              },
+              "createdAt": {
+                "type": "integer"
+              },
+              "documentId": {
+                "type": "string"
+              },
+              "errorCode": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "filename": {
+                "type": "string"
+              },
+              "finishedAt": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "id": {
+                "type": "string"
+              },
+              "kbId": {
+                "type": "string"
+              },
+              "mime": {
+                "type": "string"
+              },
+              "progressCurrent": {
+                "type": "integer"
+              },
+              "progressTotal": {
+                "type": "integer"
+              },
+              "sha256": {
+                "type": "string"
+              },
+              "stage": {
+                "type": "string"
+              },
+              "startedAt": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "status": {
+                "type": "string"
+              },
+              "updatedAt": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "id",
+              "documentId",
+              "kbId",
+              "filename",
+              "mime",
+              "sha256",
+              "bytes",
+              "status",
+              "stage",
+              "progressCurrent",
+              "progressTotal",
+              "attempts",
+              "createdAt",
+              "updatedAt",
+              "startedAt",
+              "finishedAt",
+              "errorCode"
+            ],
+            "type": "object"
+          },
+          "parents": {
+            "type": "integer"
+          },
+          "warningCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "kb_list_jobs",
+      "title": "List Ingest Jobs",
+      "description": "Authoritatively list recent ingest jobs for a KB, including queued/running/succeeded/failed/cancelled progression. Jobs are processing attempts and multiple jobs may reference one document; never treat job totals or filenames as a document inventory.",
+      "profiles": [
+        "default",
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "batchId": {
+            "description": "Optional batch id filter",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "clientItemId": {
+            "description": "Optional client item id filter",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "cursor": {
+            "description": "Optional pagination cursor",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "kbId": {
+            "description": "Optional KB id; defaults to the configured default KB",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "limit": {
+            "description": "Optional page size, max 100",
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "status": {
+            "description": "Optional job status filter",
+            "enum": [
+              "queued",
+              "processing",
+              "cancel_requested",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "jobs": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "attempts": {
+                  "type": "integer"
+                },
+                "bytes": {
+                  "type": "integer"
+                },
+                "createdAt": {
+                  "type": "integer"
+                },
+                "documentId": {
+                  "type": "string"
+                },
+                "errorCode": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "filename": {
+                  "type": "string"
+                },
+                "finishedAt": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "id": {
+                  "type": "string"
+                },
+                "kbId": {
+                  "type": "string"
+                },
+                "mime": {
+                  "type": "string"
+                },
+                "progressCurrent": {
+                  "type": "integer"
+                },
+                "progressTotal": {
+                  "type": "integer"
+                },
+                "sha256": {
+                  "type": "string"
+                },
+                "stage": {
+                  "type": "string"
+                },
+                "startedAt": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "status": {
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "id",
+                "documentId",
+                "kbId",
+                "filename",
+                "mime",
+                "sha256",
+                "bytes",
+                "status",
+                "stage",
+                "progressCurrent",
+                "progressTotal",
+                "attempts",
+                "createdAt",
+                "updatedAt",
+                "startedAt",
+                "finishedAt",
+                "errorCode"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "totalEstimate": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "jobs",
+          "nextCursor",
+          "totalEstimate",
+          "limit"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "kb_get_job",
+      "title": "Get Ingest Job",
+      "description": "Read one ingest job's current queued/running/succeeded/failed/cancelled status and provenance.",
+      "profiles": [
+        "default",
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "jobId": {
+            "description": "Ingest job id",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "kbId": {
+            "description": "Optional KB id; defaults to the configured default KB",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "jobId"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "attempts": {
+            "type": "integer"
+          },
+          "bytes": {
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "documentId": {
+            "type": "string"
+          },
+          "errorCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "filename": {
+            "type": "string"
+          },
+          "finishedAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "kbId": {
+            "type": "string"
+          },
+          "mime": {
+            "type": "string"
+          },
+          "progressCurrent": {
+            "type": "integer"
+          },
+          "progressTotal": {
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "stage": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "documentId",
+          "kbId",
+          "filename",
+          "mime",
+          "sha256",
+          "bytes",
+          "status",
+          "stage",
+          "progressCurrent",
+          "progressTotal",
+          "attempts",
+          "createdAt",
+          "updatedAt",
+          "startedAt",
+          "finishedAt",
+          "errorCode"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "kb_retry_job",
+      "title": "Retry Ingest Job",
+      "description": "Retry one failed or cancelled ingest job after inspecting its prior status.",
+      "profiles": [
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "jobId": {
+            "description": "Ingest job id to retry",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "kbId": {
+            "description": "Target KB id",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "kbId",
+          "jobId"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "attempts": {
+            "type": "integer"
+          },
+          "bytes": {
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "documentId": {
+            "type": "string"
+          },
+          "errorCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "filename": {
+            "type": "string"
+          },
+          "finishedAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "kbId": {
+            "type": "string"
+          },
+          "mime": {
+            "type": "string"
+          },
+          "progressCurrent": {
+            "type": "integer"
+          },
+          "progressTotal": {
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "stage": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "documentId",
+          "kbId",
+          "filename",
+          "mime",
+          "sha256",
+          "bytes",
+          "status",
+          "stage",
+          "progressCurrent",
+          "progressTotal",
+          "attempts",
+          "createdAt",
+          "updatedAt",
+          "startedAt",
+          "finishedAt",
+          "errorCode"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "kb_cancel_job",
+      "title": "Cancel Ingest Job",
+      "description": "Cancel one queued or running ingest job; destructive to in-flight ingest and requires explicit job confirmation.",
+      "profiles": [
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmJobId": {
+            "description": "Must exactly equal jobId as an explicit destructive-action confirmation",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "jobId": {
+            "description": "Ingest job id to cancel",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "kbId": {
+            "description": "Target KB id",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "kbId",
+          "jobId",
+          "confirmJobId"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "attempts": {
+            "type": "integer"
+          },
+          "bytes": {
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "documentId": {
+            "type": "string"
+          },
+          "errorCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "filename": {
+            "type": "string"
+          },
+          "finishedAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "kbId": {
+            "type": "string"
+          },
+          "mime": {
+            "type": "string"
+          },
+          "progressCurrent": {
+            "type": "integer"
+          },
+          "progressTotal": {
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "stage": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "documentId",
+          "kbId",
+          "filename",
+          "mime",
+          "sha256",
+          "bytes",
+          "status",
+          "stage",
+          "progressCurrent",
+          "progressTotal",
+          "attempts",
+          "createdAt",
+          "updatedAt",
+          "startedAt",
+          "finishedAt",
+          "errorCode"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "kb_read_handbook",
+      "title": "Read Handbook",
+      "description": "Read the JishuDB handbook or one exact heading section.",
+      "profiles": [
+        "default",
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "section": {
+            "description": "Optional exact handbook heading to extract",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "truncated": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "text",
+              "truncated"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "found": {
+                "type": "boolean"
+              },
+              "headings": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "found",
+              "headings"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "found": {
+                "type": "boolean"
+              },
+              "section": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              },
+              "truncated": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "found",
+              "section",
+              "text",
+              "truncated"
+            ],
+            "type": "object"
+          }
+        ],
+        "properties": {
+          "found": {
+            "type": "boolean"
+          },
+          "headings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "section": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "kb_get_config",
+      "title": "Get Sanitized Configuration",
+      "description": "Read a sanitized allowlisted summary of runtime retrieval/model settings.",
+      "profiles": [
+        "default",
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "answerableGate": {
+            "type": "boolean"
+          },
+          "defaultKbId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "embed": {
+            "additionalProperties": false,
+            "properties": {
+              "backend": {
+                "type": "string"
+              },
+              "dim": {
+                "type": "integer"
+              },
+              "ollamaModel": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "features": {
+            "additionalProperties": false,
+            "properties": {
+              "imageIngest": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "imageIngest"
+            ],
+            "type": "object"
+          },
+          "generation": {
+            "additionalProperties": false,
+            "properties": {
+              "apiKeyConfigured": {
+                "type": "boolean"
+              },
+              "model": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "model",
+              "apiKeyConfigured"
+            ],
+            "type": "object"
+          },
+          "ingest": {
+            "additionalProperties": false,
+            "properties": {
+              "workers": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "workers"
+            ],
+            "type": "object"
+          },
+          "ocr": {
+            "additionalProperties": false,
+            "properties": {
+              "apiKeyConfigured": {
+                "type": "boolean"
+              },
+              "backend": {
+                "type": "string"
+              },
+              "concurrency": {
+                "type": "integer"
+              },
+              "model": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "backend",
+              "model",
+              "concurrency",
+              "apiKeyConfigured"
+            ],
+            "type": "object"
+          },
+          "overrides": {
+            "additionalProperties": false,
+            "properties": {
+              "answerableGate": {
+                "type": "boolean"
+              },
+              "chunkMode": {
+                "type": "string"
+              },
+              "embedBackend": {
+                "type": "string"
+              },
+              "genModel": {
+                "type": "string"
+              },
+              "ocrBackend": {
+                "type": "string"
+              },
+              "ollamaEmbedModel": {
+                "type": "string"
+              },
+              "topK": {
+                "type": "integer"
+              },
+              "vlmModel": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "profile": {
+            "type": "string"
+          },
+          "rerank": {
+            "additionalProperties": false,
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "external": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "enabled",
+              "external"
+            ],
+            "type": "object"
+          },
+          "retrieval": {
+            "additionalProperties": false,
+            "properties": {
+              "candidatePool": {
+                "type": "integer"
+              },
+              "childChunkChars": {
+                "type": "integer"
+              },
+              "chunkMode": {
+                "type": "string"
+              },
+              "mode": {
+                "type": "string"
+              },
+              "parentChunkChars": {
+                "type": "integer"
+              },
+              "rerankPool": {
+                "type": "integer"
+              },
+              "topK": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "chunkMode",
+              "childChunkChars",
+              "parentChunkChars",
+              "mode",
+              "candidatePool",
+              "rerankPool",
+              "topK"
+            ],
+            "type": "object"
+          },
+          "toolContractVersion": {
+            "type": "string"
+          },
+          "upload": {
+            "additionalProperties": false,
+            "properties": {
+              "accept": {
+                "type": "string"
+              },
+              "effectiveImageMaxBytes": {
+                "type": "integer"
+              },
+              "extensions": {
+                "description": "Legacy upload compatibility set; some accepted formats may still return cannot_parse.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "formatsDetail": {
+                "type": "string"
+              },
+              "imageIngest": {
+                "type": "boolean"
+              },
+              "imageMaxBytes": {
+                "type": "integer"
+              },
+              "imageMaxDimension": {
+                "type": "integer"
+              },
+              "imageMaxPixels": {
+                "type": "integer"
+              },
+              "indexableExtensions": {
+                "description": "Strict parser-backed subset for managed ingestion clients.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "maxUploadBytes": {
+                "type": "integer"
+              },
+              "shortFormats": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "accept",
+              "extensions",
+              "indexableExtensions",
+              "shortFormats",
+              "imageIngest",
+              "maxUploadBytes",
+              "imageMaxBytes",
+              "effectiveImageMaxBytes",
+              "imageMaxDimension",
+              "imageMaxPixels",
+              "formatsDetail"
+            ],
+            "type": "object"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "profile",
+          "toolContractVersion",
+          "defaultKbId",
+          "answerableGate",
+          "features",
+          "upload",
+          "retrieval",
+          "embed",
+          "rerank",
+          "generation",
+          "ocr",
+          "ingest",
+          "overrides"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "kb_delete_document",
+      "title": "Delete Document",
+      "description": "Delete a document from a knowledge base; destructive and requires explicit document confirmation.",
+      "profiles": [
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmDocumentId": {
+            "description": "Must exactly equal documentId as an explicit destructive-action confirmation",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "documentId": {
+            "description": "Document id to delete",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "kbId": {
+            "description": "Target KB id",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "kbId",
+          "documentId",
+          "confirmDocumentId"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "kb_delete_kb",
+      "title": "Delete Knowledge Base",
+      "description": "Delete an entire knowledge base and all indexed content; destructive and requires explicit KB confirmation.",
+      "profiles": [
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmKbId": {
+            "description": "Must exactly equal kbId as an explicit destructive-action confirmation",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "kbId": {
+            "description": "KB id to delete",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "kbId",
+          "confirmKbId"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "kb_get_readiness",
+      "title": "Check Runtime Readiness",
+      "description": "Check the target knowledge base's basic text ingestion and retrieval runtime. Model presence is distinct from verified inference; OCR and optional dependencies are reported separately.",
+      "profiles": [
+        "default",
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "kbId": {
+            "description": "Target KB id",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "basicOcrState": {
+            "type": "string"
+          },
+          "embeddingState": {
+            "type": "string"
+          },
+          "errorCode": {
+            "type": "string"
+          },
+          "ingestionReady": {
+            "type": "boolean"
+          },
+          "kbId": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "operation": {
+            "additionalProperties": false,
+            "properties": {
+              "attempts": {
+                "type": "integer"
+              },
+              "errorCode": {
+                "type": "string"
+              },
+              "fallbackReason": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "progress": {
+                "type": "integer"
+              },
+              "recoveryAction": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "source": {
+                "type": "string"
+              },
+              "stage": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "updatedAt": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "id",
+              "status",
+              "source",
+              "stage",
+              "progress",
+              "errorCode",
+              "retryable",
+              "recoveryAction",
+              "fallbackReason",
+              "attempts",
+              "updatedAt"
+            ],
+            "type": "object"
+          },
+          "pollAfterSeconds": {
+            "type": "integer"
+          },
+          "preparationAllowed": {
+            "type": "boolean"
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "recoveryAction": {
+            "type": "string"
+          },
+          "rerankReady": {
+            "type": "boolean"
+          },
+          "rerankRequired": {
+            "type": "boolean"
+          },
+          "retrievalMode": {
+            "type": "string"
+          },
+          "runtimeVerified": {
+            "type": "boolean"
+          },
+          "searchReady": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kbId",
+          "retrievalMode",
+          "embeddingState",
+          "model",
+          "basicOcrState",
+          "errorCode",
+          "recoveryAction",
+          "ready",
+          "ingestionReady",
+          "searchReady",
+          "runtimeVerified",
+          "rerankRequired",
+          "rerankReady",
+          "preparationAllowed",
+          "pollAfterSeconds"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "kb_prepare_runtime",
+      "title": "Prepare Authorized Runtime",
+      "description": "Continue or retry the built-in embedding preparation explicitly approved during local Agent onboarding. Requires separate preparation authority; cannot change settings, URLs, paths or models.",
+      "profiles": [
+        "default",
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "attempts": {
+            "type": "integer"
+          },
+          "errorCode": {
+            "type": "string"
+          },
+          "fallbackReason": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "progress": {
+            "type": "integer"
+          },
+          "recoveryAction": {
+            "type": "string"
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string"
+          },
+          "stage": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "source",
+          "stage",
+          "progress",
+          "errorCode",
+          "retryable",
+          "recoveryAction",
+          "fallbackReason",
+          "attempts",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "note_list",
+      "title": "List Notes",
+      "description": "List source-note metadata and linked knowledge-base state. Note content, attachments, and local paths are not returned.",
+      "profiles": [
+        "default",
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "notes": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "contentUpdatedAt": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "knowledgeSyncPending": {
+                  "type": "boolean"
+                },
+                "memberships": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "addedAt": {
+                        "type": "string"
+                      },
+                      "documentId": {
+                        "type": "string"
+                      },
+                      "jobId": {
+                        "type": "string"
+                      },
+                      "kbId": {
+                        "type": "string"
+                      },
+                      "kbName": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kbId",
+                      "kbName",
+                      "documentId",
+                      "jobId",
+                      "status",
+                      "addedAt"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "createdAt",
+                "updatedAt",
+                "contentUpdatedAt",
+                "memberships",
+                "knowledgeSyncPending"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "notes"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "note_get",
+      "title": "Get Note",
+      "description": "Read one source note and its linked knowledge-base state. Local paths and attachments are not returned.",
+      "profiles": [
+        "default",
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "noteId": {
+            "maxLength": 36,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "noteId"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "contentUpdatedAt": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "knowledgeSyncPending": {
+            "type": "boolean"
+          },
+          "memberships": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "addedAt": {
+                  "type": "string"
+                },
+                "documentId": {
+                  "type": "string"
+                },
+                "jobId": {
+                  "type": "string"
+                },
+                "kbId": {
+                  "type": "string"
+                },
+                "kbName": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kbId",
+                "kbName",
+                "documentId",
+                "jobId",
+                "status",
+                "addedAt"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "content",
+          "createdAt",
+          "updatedAt",
+          "contentUpdatedAt",
+          "memberships",
+          "knowledgeSyncPending"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "note_create",
+      "title": "Create Note",
+      "description": "Create a source-only Markdown note. It is not searchable until note_link_to_kb explicitly links the saved revision. Supply noteId and createdAt for retry-safe creation; omitted values are generated for a one-off create.",
+      "profiles": [
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "maxLength": 10485760,
+            "minLength": 0,
+            "type": "string"
+          },
+          "createdAt": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "noteId": {
+            "maxLength": 36,
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 120,
+            "minLength": 0,
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "content"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "note": {
+            "additionalProperties": false,
+            "properties": {
+              "content": {
+                "type": "string"
+              },
+              "contentUpdatedAt": {
+                "type": "string"
+              },
+              "createdAt": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "knowledgeSyncPending": {
+                "type": "boolean"
+              },
+              "memberships": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "addedAt": {
+                      "type": "string"
+                    },
+                    "documentId": {
+                      "type": "string"
+                    },
+                    "jobId": {
+                      "type": "string"
+                    },
+                    "kbId": {
+                      "type": "string"
+                    },
+                    "kbName": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kbId",
+                    "kbName",
+                    "documentId",
+                    "jobId",
+                    "status",
+                    "addedAt"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "title": {
+                "type": "string"
+              },
+              "updatedAt": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "content",
+              "createdAt",
+              "updatedAt",
+              "contentUpdatedAt",
+              "memberships",
+              "knowledgeSyncPending"
+            ],
+            "type": "object"
+          },
+          "replayed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "note",
+          "replayed"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "note_update",
+      "title": "Update Note",
+      "description": "Replace a source note after explicit version confirmation. Linked knowledge-base documents refresh automatically after 30 seconds of source inactivity; no relink is required.",
+      "profiles": [
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "maxLength": 10485760,
+            "minLength": 0,
+            "type": "string"
+          },
+          "expectedUpdatedAt": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "noteId": {
+            "maxLength": 36,
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 120,
+            "minLength": 0,
+            "type": "string"
+          }
+        },
+        "required": [
+          "noteId",
+          "title",
+          "content",
+          "expectedUpdatedAt"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "contentUpdatedAt": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "knowledgeSyncPending": {
+            "type": "boolean"
+          },
+          "memberships": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "addedAt": {
+                  "type": "string"
+                },
+                "documentId": {
+                  "type": "string"
+                },
+                "jobId": {
+                  "type": "string"
+                },
+                "kbId": {
+                  "type": "string"
+                },
+                "kbName": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kbId",
+                "kbName",
+                "documentId",
+                "jobId",
+                "status",
+                "addedAt"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "content",
+          "createdAt",
+          "updatedAt",
+          "contentUpdatedAt",
+          "memberships",
+          "knowledgeSyncPending"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "note_delete",
+      "title": "Delete Note",
+      "description": "Delete a source note after explicit version and note-ID confirmation. Linked knowledge-base documents and their derived indexes are deleted; an already queued or processing refresh is cancelled.",
+      "profiles": [
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmNoteId": {
+            "maxLength": 36,
+            "minLength": 1,
+            "type": "string"
+          },
+          "expectedUpdatedAt": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "noteId": {
+            "maxLength": 36,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "noteId",
+          "expectedUpdatedAt",
+          "confirmNoteId"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "deleted": {
+            "type": "boolean"
+          },
+          "inFlightJobs": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "documentId": {
+                  "type": "string"
+                },
+                "jobId": {
+                  "type": "string"
+                },
+                "kbId": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kbId",
+                "documentId",
+                "jobId",
+                "status"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "knowledgeSyncPending": {
+            "type": "boolean"
+          },
+          "memberships": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "addedAt": {
+                  "type": "string"
+                },
+                "documentId": {
+                  "type": "string"
+                },
+                "jobId": {
+                  "type": "string"
+                },
+                "kbId": {
+                  "type": "string"
+                },
+                "kbName": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kbId",
+                "kbName",
+                "documentId",
+                "jobId",
+                "status",
+                "addedAt"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "deleted",
+          "memberships",
+          "knowledgeSyncPending",
+          "inFlightJobs"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "note_link_to_kb",
+      "title": "Link Note to Knowledge Base",
+      "description": "Link the current saved source revision to one knowledge base and queue its first searchable snapshot. Repeating an existing link safely returns its current membership and job state, even with a stale expectedUpdatedAt.",
+      "profiles": [
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "expectedUpdatedAt": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "kbId": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "noteId": {
+            "maxLength": 36,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "noteId",
+          "kbId",
+          "expectedUpdatedAt"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "membership": {
+            "additionalProperties": false,
+            "properties": {
+              "addedAt": {
+                "type": "string"
+              },
+              "documentId": {
+                "type": "string"
+              },
+              "jobId": {
+                "type": "string"
+              },
+              "kbId": {
+                "type": "string"
+              },
+              "kbName": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kbId",
+              "kbName",
+              "documentId",
+              "jobId",
+              "status",
+              "addedAt"
+            ],
+            "type": "object"
+          },
+          "replayed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "membership",
+          "replayed"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "kb_update",
+      "title": "Update Knowledge Base",
+      "description": "Update a knowledge base name and/or description. At least one mutable field is required.",
+      "profiles": [
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "maxLength": 4096,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kbId": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "kbId"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAt": {
+            "type": "integer"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "kb_update_document",
+      "title": "Update Document Title",
+      "description": "Update only an indexed document title. Source provenance and ingest audit metadata are immutable through this tool.",
+      "profiles": [
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "documentId": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "kbId": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "kbId",
+          "documentId",
+          "title"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "audio": {
+            "additionalProperties": false,
+            "properties": {
+              "durationMs": {
+                "description": "Measured duration in milliseconds, or zero until audio validation completes.",
+                "type": "integer"
+              },
+              "errorCode": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "format": {
+                "type": "string"
+              },
+              "indexErrorCode": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "indexStatus": {
+                "type": "string"
+              },
+              "jobId": {
+                "type": "string"
+              },
+              "jobStatus": {
+                "type": "string"
+              },
+              "originalBytes": {
+                "type": "integer"
+              },
+              "originalSaved": {
+                "type": "boolean"
+              },
+              "originalSha256": {
+                "type": "string"
+              },
+              "playbackReady": {
+                "type": "boolean"
+              },
+              "state": {
+                "type": "string"
+              },
+              "transcriptReady": {
+                "type": "boolean"
+              },
+              "transcriptRevision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "format",
+              "state",
+              "originalSaved",
+              "originalBytes",
+              "originalSha256",
+              "durationMs",
+              "playbackReady",
+              "transcriptReady",
+              "transcriptRevision",
+              "jobId",
+              "jobStatus",
+              "indexStatus",
+              "indexErrorCode",
+              "errorCode"
+            ],
+            "type": "object"
+          },
+          "bytes": {
+            "type": "integer"
+          },
+          "chunkCount": {
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "externalAssetId": {
+            "type": "string"
+          },
+          "faqCount": {
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "jobCount": {
+            "description": "Processing attempt count for this document; not a document count.",
+            "type": "integer"
+          },
+          "kbId": {
+            "type": "string"
+          },
+          "mime": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kbId",
+          "title",
+          "mime",
+          "sha256",
+          "bytes",
+          "status",
+          "createdAt",
+          "origin",
+          "chunkCount",
+          "faqCount",
+          "jobCount"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "kb_get_job_trace",
+      "title": "Get Ingest Job Trace",
+      "description": "Read sanitized ingest-job stage timing. Span metadata and source provenance are never returned.",
+      "profiles": [
+        "default",
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "jobId": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "kbId": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "kbId",
+          "jobId"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "job": {
+            "additionalProperties": false,
+            "properties": {
+              "attempts": {
+                "type": "integer"
+              },
+              "bytes": {
+                "type": "integer"
+              },
+              "createdAt": {
+                "type": "integer"
+              },
+              "documentId": {
+                "type": "string"
+              },
+              "errorCode": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "filename": {
+                "type": "string"
+              },
+              "finishedAt": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "id": {
+                "type": "string"
+              },
+              "kbId": {
+                "type": "string"
+              },
+              "mime": {
+                "type": "string"
+              },
+              "progressCurrent": {
+                "type": "integer"
+              },
+              "progressTotal": {
+                "type": "integer"
+              },
+              "sha256": {
+                "type": "string"
+              },
+              "stage": {
+                "type": "string"
+              },
+              "startedAt": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "status": {
+                "type": "string"
+              },
+              "updatedAt": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "id",
+              "documentId",
+              "kbId",
+              "filename",
+              "mime",
+              "sha256",
+              "bytes",
+              "status",
+              "stage",
+              "progressCurrent",
+              "progressTotal",
+              "attempts",
+              "createdAt",
+              "updatedAt",
+              "startedAt",
+              "finishedAt",
+              "errorCode"
+            ],
+            "type": "object"
+          },
+          "spans": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "durationMs": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "endedAt": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "stage": {
+                  "type": "string"
+                },
+                "startedAt": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "stage",
+                "startedAt",
+                "endedAt",
+                "durationMs"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "job",
+          "spans"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "kb_list_sources",
+      "title": "List Knowledge Sources",
+      "description": "List configured Feishu and local-folder sources for a knowledge base. Credentials, URLs, and local paths are not returned.",
+      "profiles": [
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "kbId": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "kbId"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "sources": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "actions": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "connected": {
+                  "type": "boolean"
+                },
+                "currentRun": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "errorCode": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "finishedAt": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "startedAt": {
+                      "type": "integer"
+                    },
+                    "state": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "state",
+                    "startedAt",
+                    "finishedAt",
+                    "errorCode"
+                  ],
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                },
+                "id": {
+                  "type": "string"
+                },
+                "kbId": {
+                  "type": "string"
+                },
+                "lastAttemptAt": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "lastErrorCode": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "lastSuccessAt": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "status": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "type",
+                "kbId",
+                "connected",
+                "status",
+                "lastAttemptAt",
+                "lastSuccessAt",
+                "currentRun",
+                "lastErrorCode",
+                "actions"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "sources"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "kb_sync_source",
+      "title": "Sync Knowledge Source",
+      "description": "Request one manual Feishu sync or local-folder rescan for an existing source. This tool cannot register, configure, disconnect, or remove sources.",
+      "profiles": [
+        "jishudb"
+      ],
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "kbId": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "sourceId": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "sourceType": {
+            "enum": [
+              "feishu",
+              "folder"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "kbId",
+          "sourceId",
+          "sourceType"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "replayed": {
+            "type": "boolean"
+          },
+          "source": {
+            "additionalProperties": false,
+            "properties": {
+              "actions": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "connected": {
+                "type": "boolean"
+              },
+              "currentRun": {
+                "additionalProperties": false,
+                "properties": {
+                  "errorCode": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "finishedAt": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "startedAt": {
+                    "type": "integer"
+                  },
+                  "state": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "state",
+                  "startedAt",
+                  "finishedAt",
+                  "errorCode"
+                ],
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "id": {
+                "type": "string"
+              },
+              "kbId": {
+                "type": "string"
+              },
+              "lastAttemptAt": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "lastErrorCode": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "lastSuccessAt": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "status": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "kbId",
+              "connected",
+              "status",
+              "lastAttemptAt",
+              "lastSuccessAt",
+              "currentRun",
+              "lastErrorCode",
+              "actions"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "source",
+          "replayed"
+        ],
+        "type": "object"
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      }
+    }
+  ],
+  "errorCodes": [
+    "UNKNOWN_TOOL",
+    "INVALID_ARGUMENT",
+    "NOT_FOUND",
+    "CONFLICT",
+    "REJECTED",
+    "TEMPORARILY_UNAVAILABLE",
+    "INTERNAL_ERROR"
+  ]
+}

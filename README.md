@@ -177,3 +177,34 @@ script, asset, capability claim, authorization boundary, and completion check.
 ## About AIJISHU
 
 Built by [AIJISHU](https://aijishu.com/) — practical AI tools for knowledge, agents, evaluation, and real-world development.
+
+## Development and validation
+
+This repository is the source of truth for Skill content, installer helpers,
+packaging, and Skill-specific tests. JishuDB Desktop and service implementation
+and release producer checks remain in the application repository.
+
+Run `npm test` with Node.js 22 or later, Python 3, Git, and GNU tar on Linux.
+This checks helpers, packaged resources, API tool references, and reproducible
+standard/SkillHub distributions. On Windows, run
+`node --test scripts/jishudb-install-windows-helper.test.mjs` and
+`./scripts/windows-check.ps1` with Node.js, Python, and Git available. Native
+Windows checks create only temporary compatibility evidence, not an installation.
+Set `JISHUDB_RUN_LIVE_SKILL_PLAN=true` only for an intentional read-only release
+plan check; execution and installation are never part of CI.
+
+Package the reviewed installation Skill from a clean checkout:
+
+```sh
+npm run package:jishudb-skill -- --output-dir /tmp/jishudb-skill-dist
+npm run package:jishudb-skillhub -- --output-dir /tmp/jishudb-skillhub-dist
+```
+
+`--allow-dirty` is for local validation only; its manifest is not eligible for
+publication. The complete package includes the connection recovery reference.
+
+The offline [MCP contract snapshot](docs/contracts/jishudb-mcp-v2.json) is copied
+unchanged from `docs/contracts/jishudb-mcp-v2.json` at JishuDB revision
+`71e8dfae434f93df6fb8ea34ddda8421a1529968`. Update it deliberately with the consumer
+contract baseline when supported APIs change; it is not a live-server capability
+claim. No test requires a neighboring JishuDB checkout.

@@ -1,0 +1,13 @@
+{
+  "name": "jishudb-skills",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test scripts/*.test.mjs && python3 -m unittest discover -s scripts -p \"test_*.py\"",
+    "package:jishudb-skill": "node scripts/package-jishudb-skill.mjs",
+    "package:jishudb-skillhub": "python3 scripts/package-jishudb-skillhub.py"
+  }
+}

@@ -15,7 +15,7 @@ compatibility: >-
   the user's local machine.
 metadata:
   author: jishudb
-  version: "0.1.10"
+  version: "0.1.11"
   openclaw:
     homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/jishudb
 ---
@@ -54,8 +54,10 @@ authorize an acceptance run.
 
 1. Establish whether this Agent runs on the target machine. A cloud, container,
    or remote Agent cannot install the user's local Desktop application.
-2. If the user supplied a remote JishuDB URL, use that target and do not install
-   locally.
+2. If the user explicitly selected a remote JishuDB URL, use that target and
+   do not install locally. An old client entry is not an explicit target choice.
+   If the configured target fails or conflicts with the request, follow the
+   connection recovery workflow below before choosing another service.
 3. Resolve the Desktop endpoint from the current-user-only `desktop-endpoint.json`
    file under the Desktop state root. On macOS this is normally
    `~/Library/Application Support/JishuDB/desktop-endpoint.json`; on Windows it
@@ -73,6 +75,16 @@ authorize an acceptance run.
    headless data owner with an exact approved non-Desktop `JISHUDB_DATA`.
 7. Report a stdio-only Desktop or remote client as `BLOCKED`. Do not stop
    Desktop, open its SQLite data, or install a proxy.
+
+### Recover an unavailable connection
+
+When an existing MCP connection fails, read
+[references/connection-recovery.md](references/connection-recovery.md).
+Diagnose the configured target, service startup, authentication, and actual
+client separately. Offer only relevant recovery choices; honor a target or
+repair already authorized in the conversation instead of asking again.
+Do not label an unreachable MCP as a database write failure, infer network
+location from a timeout, or claim success after only changing a URL.
 
 ### Automatic Desktop installation
 

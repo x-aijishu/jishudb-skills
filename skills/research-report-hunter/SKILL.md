@@ -13,7 +13,7 @@ compatibility: >-
   require available OCR/vision. Setup uses the official jishudb companion Skill.
 metadata:
   author: jishudb
-  version: "0.1.1"
+  version: "0.1.2"
   openclaw:
     homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/research-report-hunter
 ---
@@ -57,13 +57,20 @@ Read this package's [evidence contract](references/evidence-contract.md) before 
    and up to eight useful reports. A decision, publisher preference, date
    range, or full-report requirement is optional. Clarify genuine topic or
    access ambiguity; do not require uploads, subscriptions, or an account.
-2. Reuse the host's JishuDB MCP connection. If missing or unusable, have the
-   host load the official `jishudb` companion Skill and its packaged
-   `references/installation-contract.md` through its supported Skill mechanism.
-   Do not invent a Skill invocation tool or sibling path, duplicate installer
-   commands, guess client configuration paths, scan ports, or copy secrets.
-   Preserve OS, administrator, client-trust, and authorization gates. Missing
-   companion support or declined setup means `BLOCKED`, not local-only mode.
+2. Reuse a working host JishuDB MCP connection for the user's intended service.
+   When unavailable, pause discovery and generation and explain the observed
+   connection failure first; a saved remote URL is not proof the user wants it.
+   Load the official `jishudb` companion Skill through the supported host loader
+   and follow its connection recovery workflow. Let the user choose the existing
+   local installation, the intended remote service, or postponing the task when
+   the target is unresolved. Reuse a choice already made in this conversation.
+   If the companion is missing, offer installation through the host's supported
+   Skill mechanism or manual connection in host settings. Do not guess paths,
+   copy secrets, scan ports, invent invocation tools, or duplicate installers.
+   An available service does not require reinstalling Desktop or the companion
+   just to use a working host connection. A pending choice or browser consent is
+   `USER_ACTION_REQUIRED`; unsupported or declined recovery is `BLOCKED`.
+   Do not continue in local-only mode and discover the missing backend at the end.
 3. Inspect live `tools/list` schemas and call `kb_get_capabilities({})`.
    Record the actual service, contract, transport, profile, required tools,
    and upload limits, not a frozen tool count. For unfamiliar behavior use
