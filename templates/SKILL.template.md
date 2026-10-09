@@ -43,8 +43,8 @@ evidence required before claiming success.>
 
 1. <Identify the target, desired result, and ambiguity that would materially
    change the workflow.>
-2. <State safe defaults and ask only for missing information that cannot be
-   verified.>
+2. <Use defaults only for omitted details; preserve the requested count and
+   formats. Resolve routine choices without questions and reuse existing consent.>
 
 ### 2. Inspect prerequisites and current state
 
@@ -58,7 +58,8 @@ evidence required before claiming success.>
    interfaces.>
 2. <Preserve IDs, source evidence, and original error details needed for safe
    retry or handoff.>
-3. <Place authorization checks immediately before writes or external changes.>
+3. <Check whether existing authorization covers writes or external changes;
+   ask only for missing scope. Bound discovery, retries, and correction passes.>
 
 ### 4. Verify and hand off
 

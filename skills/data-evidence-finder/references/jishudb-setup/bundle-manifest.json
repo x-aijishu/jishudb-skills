@@ -28,6 +28,11 @@
       "path": "setup.md",
       "sha256": "286ab3529bb20b87c67e979fa8b143beb3105decfd012500793990d2f1908811",
       "mode": "644"
+    },
+    {
+      "path": "task-execution.md",
+      "sha256": "a6d8753b62a34c8c4ed004087a14a5ceca9023b90260268cb6cc3ce9c5073602",
+      "mode": "644"
     }
   ]
 }

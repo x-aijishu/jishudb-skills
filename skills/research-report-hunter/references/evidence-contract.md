@@ -7,9 +7,10 @@ and updates. It ships inside this package and requires no sibling Skill files.
 
 1. Use public or explicitly authorized host browsing/search. Prefer original
    publishers, official statistics, public filings, and research institutions.
-   Start with six focused queries or browsing routes and at most 20 candidates,
-   then one targeted gap pass; these are adjustable defaults, not completeness
-   claims. Record queries, attempted surfaces, exclusions, and collection time.
+   Start with one or two focused queries for a narrow question. For a broader
+   report, use up to six queries or routes and at most 20 candidates, then one
+   targeted gap pass. These are ceilings, not quotas: stop discovery when the
+   requested claims are supported or the remaining evidence gap is explicit. Record queries, attempted surfaces, exclusions, and collection time.
 2. Candidate discovery surfaces include
    [199IT's report category](https://www.199it.com/archives/category/report)
    and [199IT's RSS feed](https://www.199it.com/feed). RSS supports recent

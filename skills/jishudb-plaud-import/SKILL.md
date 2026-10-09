@@ -11,7 +11,7 @@ compatibility: Requires authorized JishuDB MCP write tools and either authorized
 metadata:
   author: jishudb
   bundled-setup: jishudb
-  version: "0.1.3"
+  version: "0.1.4"
   openclaw:
     homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/jishudb-plaud-import
 ---
@@ -53,14 +53,19 @@ connecting or uploading, and use the
 Use the host's actual namespaced tools and live input schemas; tool names below
 are the unprefixed vendor and JishuDB names.
 
+Follow the packaged [task execution defaults](references/jishudb-setup/task-execution.md)
+for routine choices and bounded recovery; retain the recording-specific consent
+and identity rules below.
+
 ### Scope and approval
 
 1. Resolve the recording selection, material mode, destination KB, and output
    directory from the request. For an unqualified recording import, propose
    original audio plus any available existing transcript; summaries are a
    separate representation. Reuse an explicit user choice.
-2. Disclose the selected source-to-JishuDB transfer and obtain approval for
-   its actual material and destination. Do not interpret installing this Skill
+2. Reuse explicit transfer authorization when the request already identifies
+   the selected material and destination. Otherwise disclose the concrete
+   source-to-JishuDB transfer and obtain only the missing scope once. Do not interpret installing this Skill
    as account access, installation approval, or knowledge-base write approval.
 3. Use the host's language for questions, reports, and meeting analysis. Ask
    only for ambiguous selections or necessary authorization, not for a resume,

@@ -1,6 +1,6 @@
 # Jishu Skill Authoring Specification
 
-Version: 1.0
+Version: 1.1
 Applies to: `jishudb-skills` and `jishubuddy-skills`
 
 ## Purpose
@@ -114,6 +114,22 @@ Prefer numbered steps for sequence, tables for mappings, and bullets for
 independent rules. Put commands immediately after the step that uses them.
 Examples MUST use explicit placeholders and MUST NOT contain real secrets,
 private endpoints, personal paths, or unsafe defaults.
+
+### Defaults and bounded execution
+
+- User-specified counts, formats, and constraints override all defaults and
+  examples. Defaults must fill missing details without expanding the task.
+- Choose routine style, dimensions, filenames, and local output locations
+  automatically. Ask only about consequential ambiguity or missing authority.
+- Reuse existing consent for the same scope. A later workflow step must not
+  trigger another prompt for permissions already granted.
+- Give tool discovery, transient retries, artifact corrections, and polling
+  explicit stopping conditions. Prefer documented, tested output routes and
+  provide a fallback when the primary route fails.
+- Deliver existing useful artifacts with precise missing steps when partial;
+  do not hide completed work behind optional preferences or indefinite repair.
+- Shared task defaults are maintained in `templates/task-execution.md` and
+  bundled by `scripts/bundle-task-setup.py`; do not edit generated copies.
 
 ### Progressive disclosure
 

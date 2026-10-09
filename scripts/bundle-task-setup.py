@@ -40,6 +40,10 @@ def bundle_files() -> dict[str, tuple[bytes, int]]:
     recovery, mode = files["references/connection-recovery.md"]
     files["references/connection-recovery.md"] = (recovery.replace(b"`SKILL.md`", b"[setup guide](../setup.md)"), mode)
     files["setup.md"] = ((note + source[frontmatter.end():].lstrip()).encode(), 0o644)
+    files["task-execution.md"] = ((
+        "<!-- Generated from templates/task-execution.md; do not edit this copy. -->\n\n"
+        + (REPOSITORY_ROOT / "templates/task-execution.md").read_text(encoding="utf-8")
+    ).encode(), 0o644)
     manifest = {
         "schemaVersion": 1,
         "sourceSkill": "jishudb",
