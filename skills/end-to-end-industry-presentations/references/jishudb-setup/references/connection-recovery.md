@@ -28,7 +28,7 @@ No answer means the target remains unresolved; elapsed time is not consent.
 
 ## Diagnose the failing layer
 
-Use the endpoint-resolution and health-identity rules in `SKILL.md`. Report the
+Use the endpoint-resolution and health-identity rules in [setup guide](../setup.md). Report the
 observed error and next action; keep hypotheses separate from verified causes.
 Retain sanitized exit codes, signals, elapsed times, and error causes where
 available, never authentication headers or full environment dumps.
@@ -56,7 +56,7 @@ Read-only diagnosis needs no repeated confirmation. Use existing authorization
 for the selected target and repair. If a decision is missing, present the
 concrete proposed change and its effect on which knowledge base is used before
 requesting that choice. Installation, upgrades, data changes, and additional
-privileges retain their own scope and presence gates from `SKILL.md`.
+privileges retain their own scope and presence gates from [setup guide](../setup.md).
 
 Prefer the host's supported configuration UI or command. For an authorized file
 edit, back up privately, preserve unrelated entries and permissions, detect

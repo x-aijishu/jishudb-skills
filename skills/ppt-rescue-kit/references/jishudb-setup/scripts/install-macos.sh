@@ -24,6 +24,8 @@ shift
 
 PLAN_PATH=""
 PLAN_SHA256=""
+CANDIDATE_TAG=""
+CANDIDATE_REVISION=""
 CLIENT=""
 CONFIG_TARGET=""
 CONNECTION_NAME="jishudb"
@@ -53,6 +55,16 @@ while (( $# > 0 )); do
     --plan-sha256)
       (( $# >= 2 )) || { print -u2 -- "--plan-sha256 requires a value"; exit 2; }
       PLAN_SHA256="$2"
+      shift 2
+      ;;
+    --candidate-tag)
+      (( $# >= 2 )) || { print -u2 -- "--candidate-tag requires a value"; exit 2; }
+      CANDIDATE_TAG="$2"
+      shift 2
+      ;;
+    --candidate-revision)
+      (( $# >= 2 )) || { print -u2 -- "--candidate-revision requires a value"; exit 2; }
+      CANDIDATE_REVISION="$2"
       shift 2
       ;;
     --client)
@@ -171,18 +183,34 @@ function selectRelease(paths) {
     if (!Array.isArray(page)) throw new Error('release page must be an array');
     page.forEach((release) => releases.push(release));
   });
+  return selectFromReleases(releases, null);
+}
+
+// AI-generated opt-in rehearsal boundary: an exact tag and source are mandatory.
+function candidateRequest(tag, revision) {
+  requireString(tag, /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-desktop-candidate\.([1-9][0-9]{0,6})$/, 'candidate tag');
+  requireString(revision, /^[0-9a-f]{40}$/, 'candidate source revision');
+  return { tag, revision, version: tag.slice(1).split('-desktop-candidate.')[0] };
+}
+
+function selectFromReleases(releases, requested) {
   const eligible = [];
   releases.forEach((release) => {
-    if (release.draft || release.prerelease || release.immutable !== true) return;
-    if (typeof release.tag_name !== 'string' || !/^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(release.tag_name)) return;
-    const version = release.tag_name.slice(1);
+    if (release.draft !== false || release.immutable !== true) return;
+    if (requested) {
+      if (release.prerelease !== true || release.tag_name !== requested.tag) return;
+    } else {
+      if (release.prerelease !== false || typeof release.tag_name !== 'string' || !/^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(release.tag_name)) return;
+    }
+    const version = requested ? requested.version : release.tag_name.slice(1);
     const parts = semverParts(version);
     const signedName = 'jishudb-desktop-' + version + '-darwin-arm64.dmg';
     const hasSignedAssets = Array.isArray(release.assets) && release.assets.some((asset) =>
       [signedName, signedName + '.sha256', signedName + '.candidate.json'].includes(asset.name));
-    const installerName = hasSignedAssets ? signedName : 'jishudb-desktop-' + version + '-unsigned-darwin-arm64.dmg';
+    const installerName = (requested || hasSignedAssets) ? signedName : 'jishudb-desktop-' + version + '-unsigned-darwin-arm64.dmg';
     try {
       eligible.push({
+        ...(requested ? {candidateRevision: requested.revision} : {}),
         version,
         parts,
         release: {
@@ -201,7 +229,8 @@ function selectRelease(paths) {
       return;
     }
   });
-  if (eligible.length === 0) throw new Error('no eligible immutable stable macOS release is available');
+  if (eligible.length === 0) throw new Error(requested ? 'requested immutable signed macOS prerelease is unavailable' : 'no eligible immutable stable macOS release is available');
+  if (requested && eligible.length !== 1) throw new Error('candidate release is ambiguous');
   eligible.sort((left, right) => compareSemver(left.parts, right.parts));
   const selected = eligible[0];
   delete selected.parts;
@@ -276,6 +305,13 @@ function candidatePublisher(candidate) {
 }
 
 function validateCandidate(candidate, selected) {
+  if (selected.candidateRevision && candidate.revision !== selected.candidateRevision) {
+    throw new Error('candidate revision differs from the explicitly requested source');
+  }
+  if (selected.release && selected.release.prerelease === true &&
+      (candidate.schemaVersion !== 3 || candidate.agentBackgroundLaunch !== 1)) {
+    throw new Error('rehearsal requires a signed background-launch candidate');
+  }
   if (candidate && candidate.schemaVersion === 3) return validateSignedCandidate(candidate, selected);
   exactKeys(candidate, [
     'artifact', 'authorization', 'bundleIdentifier', 'distribution',
@@ -333,7 +369,8 @@ function createPlan(selected, candidate, argv) {
   const now = new Date();
   const expires = new Date(now.getTime() + 30 * 60 * 1000);
   return {
-    schema: candidate.agentBackgroundLaunch === 1 ? 'jishudb-agent-install-plan-v2' : 'jishudb-agent-install-plan-v1',
+    schema: selected.release.prerelease === true ? 'jishudb-agent-install-plan-v3' : candidate.agentBackgroundLaunch === 1 ? 'jishudb-agent-install-plan-v2' : 'jishudb-agent-install-plan-v1',
+    ...(selected.release.prerelease === true ? {releaseChannel: 'candidate'} : {}),
     ...(candidate.agentBackgroundLaunch === 1 ? {launchMode: 'agent-background'} : {}),
     createdAt: now.toISOString(),
     expiresAt: expires.toISOString(),
@@ -371,10 +408,12 @@ function createPlan(selected, candidate, argv) {
 }
 
 function validatePlan(plan) {
+  const rehearsal = plan && plan.schema === 'jishudb-agent-install-plan-v3';
   exactKeys(plan, [
     'schema', 'createdAt', 'expiresAt', 'operation', 'platform', 'userId',
     'release', 'assets', 'installation', 'connection', 'publisher',
-    ...(plan.schema === 'jishudb-agent-install-plan-v2' ? ['launchMode'] : []),
+    ...(['jishudb-agent-install-plan-v2', 'jishudb-agent-install-plan-v3'].includes(plan.schema) ? ['launchMode'] : []),
+    ...(rehearsal ? ['releaseChannel'] : []),
   ], 'plan');
   exactKeys(plan.release, ['repository', 'id', 'tag', 'version', 'targetCommitish', 'sourceRepository', 'sourceRevision'], 'plan.release');
   exactKeys(plan.assets, ['installer', 'checksum', 'candidate'], 'plan.assets');
@@ -394,8 +433,9 @@ function validatePlan(plan) {
     throw new Error('plan is expired or has an invalid lifetime');
   }
   requireDesktopMCPURL(plan.connection.url);
-  if (!['jishudb-agent-install-plan-v1', 'jishudb-agent-install-plan-v2'].includes(plan.schema) ||
-      (plan.schema === 'jishudb-agent-install-plan-v2' && plan.launchMode !== 'agent-background') || plan.operation !== 'fresh-install' ||
+  if (!['jishudb-agent-install-plan-v1', 'jishudb-agent-install-plan-v2', 'jishudb-agent-install-plan-v3'].includes(plan.schema) ||
+      (rehearsal && (plan.releaseChannel !== 'candidate' || !signed)) ||
+      (plan.schema !== 'jishudb-agent-install-plan-v1' && plan.launchMode !== 'agent-background') || plan.operation !== 'fresh-install' ||
       plan.platform !== 'darwin-arm64' || plan.release.repository !== 'x-aijishu/jishudb-desktop-releases' ||
       plan.release.sourceRepository !== 'x-aijishu/jishudb' ||
       plan.connection.profile !== 'default' ||
@@ -403,8 +443,11 @@ function validatePlan(plan) {
       (signed ? plan.publisher.gatekeeper !== 'accepted' : plan.publisher.identity !== 'none' || plan.publisher.gatekeeper !== 'manual-required')) {
     throw new Error('plan is outside the reviewed automatic-install contract');
   }
+  if (rehearsal && candidateRequest(plan.release.tag, plan.release.sourceRevision).version !== plan.release.version) {
+    throw new Error('candidate tag does not match the plan version');
+  }
   if (!/^[1-9][0-9]*$/.test(plan.userId) || !Number.isSafeInteger(plan.release.id) || plan.release.id <= 0 ||
-      !semverParts(plan.release.version) || plan.release.tag !== 'v' + plan.release.version ||
+      !semverParts(plan.release.version) || (!rehearsal && plan.release.tag !== 'v' + plan.release.version) ||
       typeof plan.release.targetCommitish !== 'string' || plan.release.targetCommitish.length < 1 ||
       /[\u0000-\u001f\u007f]/.test(plan.release.targetCommitish)) {
     throw new Error('plan release or user identity is invalid');
@@ -434,7 +477,8 @@ function validatePlan(plan) {
 }
 
 function releaseMatchesPlan(release, plan) {
-  if (release.immutable !== true || release.draft || release.prerelease ||
+  const rehearsal = plan.schema === 'jishudb-agent-install-plan-v3';
+  if (release.immutable !== true || release.draft !== false || release.prerelease !== rehearsal ||
       release.id !== plan.release.id || release.tag_name !== plan.release.tag ||
       String(release.target_commitish) !== plan.release.targetCommitish) {
     throw new Error('release identity or immutable state changed');
@@ -480,6 +524,13 @@ function run(argv) {
     return unwrap(path.stringByResolvingSymlinksInPath.stringByStandardizingPath);
   }
   if (command === 'select') return JSON.stringify(selectRelease(argv));
+  if (command === 'candidate-request') {
+    candidateRequest(argv[0], argv[1]);
+    return 'ok';
+  }
+  if (command === 'select-candidate') {
+    return JSON.stringify(selectFromReleases([readJSON(argv[0])], candidateRequest(argv[1], argv[2])));
+  }
   if (command === 'candidate') {
     validateCandidate(readJSON(argv[0]), readJSON(argv[1]));
     return 'ok';
@@ -500,6 +551,8 @@ function run(argv) {
     const plan = validatePlan(readJSON(argv[1]));
     const selected = {
       version: plan.release.version,
+      candidateRevision: plan.release.sourceRevision,
+      release: {prerelease: plan.schema === 'jishudb-agent-install-plan-v3'},
       installer: {
         name: plan.assets.installer.name,
         size: plan.assets.installer.size,
@@ -509,7 +562,7 @@ function run(argv) {
     };
     const candidate = validateCandidate(readJSON(argv[0]), selected);
     if (Object.keys(plan.publisher).some((key) => candidatePublisher(candidate)[key] !== plan.publisher[key])) throw new Error('candidate publisher does not match the approved plan');
-    if ((candidate.agentBackgroundLaunch === 1) !== (plan.schema === 'jishudb-agent-install-plan-v2')) throw new Error('Agent launch capability no longer matches the approved plan');
+    if ((candidate.agentBackgroundLaunch === 1) !== (plan.launchMode === 'agent-background')) throw new Error('Agent launch capability no longer matches the approved plan');
     if (candidate.revision !== plan.release.sourceRevision) throw new Error('candidate revision does not match the plan');
     return 'ok';
   }
@@ -547,6 +600,9 @@ function run(argv) {
         planSha256: argv[2],
         approval: {
           version: plan.release.version,
+          releaseChannel: plan.releaseChannel || 'stable',
+          releaseTag: plan.release.tag,
+          sourceRevision: plan.release.sourceRevision,
           releaseId: plan.release.id,
           installer: plan.assets.installer.name,
           installerSha256: plan.assets.installer.sha256,
@@ -712,19 +768,26 @@ run_plan() {
   local transaction_root target_plan digest installer_name installer_sha checksum_text expected_checksum
   evidence_root=$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/JishuDBAgentEvidence.XXXXXX")
   CLEANUP_PATHS+=("$evidence_root")
-  local -a pages
-  pages=()
-  local page
-  for page in {1..$MAX_RELEASE_PAGES}; do
-    page_path="${evidence_root}/releases-${page}.json"
-    api_get "${API_ORIGIN}/repos/${RELEASE_REPOSITORY}/releases?per_page=100&page=${page}" "$page_path"
-    pages+=("$page_path")
-    count=$(jxa count "$page_path") || fail "invalid_release_response" "release page is invalid"
-    (( count < 100 )) && break
-    (( page < MAX_RELEASE_PAGES )) || fail "pagination_bound" "release selection exceeded ${MAX_RELEASE_PAGES} pages"
-  done
   selected_path="${evidence_root}/selected.json"
-  jxa select "${pages[@]}" > "$selected_path" || fail "no_eligible_immutable_release" "no eligible immutable stable macOS release is available"
+  if [[ -n "$CANDIDATE_TAG" || -n "$CANDIDATE_REVISION" ]]; then
+    jxa candidate-request "$CANDIDATE_TAG" "$CANDIDATE_REVISION" >/dev/null || fail "invalid_arguments" "candidate testing requires an exact tag and full source revision"
+    page_path="${evidence_root}/candidate-release.json"
+    api_get "${API_ORIGIN}/repos/${RELEASE_REPOSITORY}/releases/tags/${CANDIDATE_TAG}" "$page_path"
+    jxa select-candidate "$page_path" "$CANDIDATE_TAG" "$CANDIDATE_REVISION" > "$selected_path" || fail "candidate_release_unavailable" "the requested immutable signed prerelease is not eligible; no stable fallback was attempted"
+  else
+    local -a pages
+    pages=()
+    local page
+    for page in {1..$MAX_RELEASE_PAGES}; do
+      page_path="${evidence_root}/releases-${page}.json"
+      api_get "${API_ORIGIN}/repos/${RELEASE_REPOSITORY}/releases?per_page=100&page=${page}" "$page_path"
+      pages+=("$page_path")
+      count=$(jxa count "$page_path") || fail "invalid_release_response" "release page is invalid"
+      (( count < 100 )) && break
+      (( page < MAX_RELEASE_PAGES )) || fail "pagination_bound" "release selection exceeded ${MAX_RELEASE_PAGES} pages"
+    done
+    jxa select "${pages[@]}" > "$selected_path" || fail "no_eligible_immutable_release" "no eligible immutable stable macOS release is available"
+  fi
   candidate_path="${evidence_root}/candidate.json"
   checksum_path="${evidence_root}/checksum.txt"
   asset_download "$(jxa value "$selected_path" 'candidate.url')" "$candidate_path"
@@ -770,6 +833,7 @@ run_plan() {
 }
 
 run_execute() {
+  [[ -z "$CANDIDATE_TAG" && -z "$CANDIDATE_REVISION" ]] || fail "invalid_arguments" "candidate selection is plan-only; execute the unchanged approved plan"
   [[ "$(/usr/bin/uname -s)" == "Darwin" && "$(/usr/bin/uname -m)" == "arm64" ]] || fail "unsupported_platform" "automatic macOS installation requires macOS arm64"
   [[ -n "$PLAN_PATH" && "$PLAN_SHA256" =~ '^[0-9a-f]{64}$' ]] || fail "invalid_arguments" "--plan and a lowercase SHA-256 are required in execute mode"
   PLAN_PATH="${PLAN_PATH:A}"
@@ -861,7 +925,7 @@ run_execute() {
   [[ -f "${app_path}/Contents/Resources/runtime/jishudb" && ! -L "${app_path}/Contents/Resources/runtime/jishudb" ]] || fail "installed_receipt_invalid" "installed runtime receipt is invalid"
   jxa manifest "${app_path}/Contents/Resources/runtime/RELEASE-MANIFEST.json" "$version" "$revision" >/dev/null || fail "installed_receipt_invalid" "installed release manifest does not match the plan"
   write_endpoint_config "$data_root" "$mcp_url"
-  if [[ "$(jxa plan-value "$PLAN_PATH" 'schema')" == "jishudb-agent-install-plan-v2" ]]; then
+  if [[ "$(jxa plan-value "$PLAN_PATH" 'schema')" != "jishudb-agent-install-plan-v1" ]]; then
     /usr/bin/open -g "$app_path" --args --jishudb-agent-background || fail "desktop_launch_failed" "installed Desktop could not be launched in background"
   else
     /usr/bin/open "$app_path" || fail "desktop_launch_failed" "installed Desktop could not be launched"

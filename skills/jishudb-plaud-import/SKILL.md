@@ -11,7 +11,7 @@ compatibility: Requires authorized JishuDB MCP write tools and either authorized
 metadata:
   author: jishudb
   bundled-setup: jishudb
-  version: "0.1.2"
+  version: "0.1.3"
   openclaw:
     homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/jishudb-plaud-import
 ---

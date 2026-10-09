@@ -79,3 +79,67 @@ test('macOS candidate rejects incomplete or mixed signing evidence before instal
     const value = candidate(); mutate(value); assert.throws(() => helper.validateCandidate(value, selected));
   }
 });
+
+test('explicit macOS candidate selection binds source, approval channel and execution revalidation', () => {
+  const prerelease = { ...release(), tag_name: 'v1.2.3-desktop-candidate.1', prerelease: true };
+  documents.prerelease = prerelease;
+  documents.releases = [prerelease, release()];
+  assert.equal(helper.selectRelease(['releases']).release.tag, 'v1.2.3');
+  const selected = JSON.parse(helper.run(['select-candidate', 'prerelease', prerelease.tag_name, revision]));
+  const value = helper.validateCandidate(candidate(), selected);
+  const plan = helper.createPlan(selected, value, ['501', '/Users/test/Applications/JishuDB.app', '/Users/test/Library/Application Support/JishuDB', 'WorkBuddy', '/Users/test/client.json', 'jishudb', 'http://127.0.0.1:8088/mcp']);
+  assert.equal(plan.schema, 'jishudb-agent-install-plan-v3');
+  assert.equal(plan.releaseChannel, 'candidate');
+  assert.equal(plan.launchMode, 'agent-background');
+  helper.validatePlan(plan);
+  documents.plan = plan;
+  documents.candidate = candidate();
+  const envelope = JSON.parse(helper.run(['result', 'plan', 'plan', 'c'.repeat(64)]));
+  assert.equal(envelope.approval.releaseChannel, 'candidate');
+  assert.equal(envelope.approval.releaseTag, prerelease.tag_name);
+  assert.equal(envelope.approval.sourceRevision, revision);
+  assert.equal(helper.run(['candidate-plan', 'candidate', 'plan']), 'ok');
+  assert.equal(helper.run(['release-match', 'prerelease', 'plan']), 'ok');
+  for (const mutate of [
+    r => { r.immutable = false; },
+    r => { r.draft = true; },
+    r => { r.prerelease = false; },
+    r => { r.tag_name = 'v1.2.3-desktop-candidate.2'; },
+    r => { r.assets[0].digest = `sha256:${'d'.repeat(64)}`; },
+    r => { r.assets[0].id++; },
+    r => { r.assets[0].size++; },
+  ]) {
+    documents.changed = structuredClone(prerelease); mutate(documents.changed);
+    assert.throws(() => helper.run(['release-match', 'changed', 'plan']));
+  }
+  documents.candidate.revision = 'c'.repeat(40);
+  assert.throws(() => helper.run(['candidate-plan', 'candidate', 'plan']), /revision/);
+});
+
+test('candidate opt-in rejects unbound, unsigned, foreground and downgraded requests', () => {
+  documents.prerelease = { ...release(), tag_name: 'v1.2.3-desktop-candidate.1', prerelease: true };
+  for (const [tag, sha] of [
+    ['v1.2.3', revision], ['v1.2.3-desktop-candidate.0', revision],
+    ['v1.2.3-desktop-candidate.1/../../latest', revision],
+    ['v1.2.3-desktop-candidate.1', ''], ['v1.2.3-desktop-candidate.1', 'main'],
+  ]) assert.throws(() => helper.run(['select-candidate', 'prerelease', tag, sha]));
+  for (const mutate of [
+    r => { r.prerelease = false; }, r => { r.immutable = false; }, r => { r.draft = true; },
+    r => { r.assets = r.assets.filter(a => a.name.includes('unsigned')); },
+  ]) {
+    documents.rejected = structuredClone(documents.prerelease); mutate(documents.rejected);
+    assert.throws(() => helper.run(['select-candidate', 'rejected', documents.prerelease.tag_name, revision]));
+  }
+  const selected = JSON.parse(helper.run(['select-candidate', 'prerelease', documents.prerelease.tag_name, revision]));
+  for (const mutate of [
+    c => { c.revision = 'c'.repeat(40); }, c => { delete c.agentBackgroundLaunch; },
+    c => { c.schemaVersion = 2; }, c => { c.distribution.dmgNotarization.stapled = false; },
+  ]) { const c = candidate(); mutate(c); assert.throws(() => helper.validateCandidate(c, selected)); }
+  const plan = helper.createPlan(selected, candidate(), ['501', '/Users/test/Applications/JishuDB.app', '/Users/test/Library/Application Support/JishuDB', 'WorkBuddy', '/Users/test/client.json', 'jishudb', 'http://127.0.0.1:8088/mcp']);
+  for (const mutate of [
+    p => { p.schema = 'jishudb-agent-install-plan-v2'; }, p => { p.releaseChannel = 'stable'; },
+    p => { delete p.releaseChannel; }, p => { p.launchMode = 'foreground'; },
+    p => { p.publisher = {identity: 'none', gatekeeper: 'manual-required'}; },
+    p => { p.release.version = '1.2.4'; }, p => { p.release.sourceRevision = ''; },
+  ]) { const changed = structuredClone(plan); mutate(changed); assert.throws(() => helper.validatePlan(changed)); }
+});

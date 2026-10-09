@@ -41,9 +41,9 @@ GitHub source-repository credential or treats private commit-API availability
 as an installation prerequisite. Provenance for this path is the immutable
 release, its API asset digests, adjacent checksum, and candidate manifest.
 
-Do not use the mutable `latest` endpoint, lexical version ordering,
-`target_commitish` as a source revision, a prerelease, or a differently named
-artifact.
+Normal installation must not use the mutable `latest` endpoint, lexical version
+ordering, `target_commitish` as a source revision, a prerelease, or a differently
+named artifact. The explicit macOS candidate route below is a separate opt-in.
 
 ## Asset transport
 
@@ -254,3 +254,27 @@ PKCE, private signed Desktop handoff and atomic one-time initialization remain
 mandatory. This is not native physical-presence verification and cannot be
 selected by a client parameter. Existing owners and later sensitive operations
 retain verification. Ordinary direct installation retains normal password setup.
+
+## Explicit macOS candidate rehearsal
+
+For a user-authorized macOS test only, add both `--candidate-tag` and
+`--candidate-revision` to the normal `plan` command. The tag must be exactly
+`vX.Y.Z-desktop-candidate.N` (positive N); the revision must be the approved full
+40-character lowercase source SHA. Do not infer either value, select a newer
+candidate, or use this mode because stable setup failed.
+
+The helper fetches only that exact tag from the fixed official release repository.
+It requires `draft=false`, `prerelease=true`, `immutable=true`, a signed/notarized
+macOS artifact, the requested source revision, and background launch support.
+There is no unsigned, stable or alternate-host fallback. The resulting plan uses
+`jishudb-agent-install-plan-v3`, `releaseChannel=candidate`, and
+`launchMode=agent-background`. The exact tag, source, artifact digests and signer
+are part of the approved plan and its SHA-256; the approval envelope displays
+the channel, tag and source explicitly.
+
+Execute takes only the unchanged plan path and SHA-256. It rejects candidate
+selection flags, rechecks the prerelease state and exact assets before and after
+download, and retains all ordinary hash, signer, notarization, quarantine,
+per-user path, endpoint and user-consent checks. Changing prerelease/stable state,
+revision, tag, assets or launch policy invalidates the plan. Ordinary v1/v2
+plans remain stable-only. This rehearsal mode does not change Windows plans.

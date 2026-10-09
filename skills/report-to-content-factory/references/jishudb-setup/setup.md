@@ -124,6 +124,19 @@ approval.
 If no eligible immutable stable release exists, return `BLOCKED` with the
 release-owner action. Never offer a mutable or manual download fallback.
 
+### Explicit macOS candidate testing
+
+Only when the user explicitly requests a macOS candidate test and provides its
+exact tag and full source revision, use `--candidate-tag` and
+`--candidate-revision` together in the macOS helper's `plan` mode. Read the
+candidate-testing section of the installation contract first. This selects one
+immutable signed/notarized prerelease from the same official repository, without
+falling back to a stable version. The approval envelope must show the candidate
+channel, tag and revision. Execute only the unchanged approved plan; selection
+flags are not accepted in `execute` mode. Normal installs remain stable-only;
+Windows candidate selection is not implemented. A request for an ordinary task
+is not permission to test prereleases.
+
 ### Agent onboarding capability
 
 After health identity and endpoint validation, a same-machine client may read

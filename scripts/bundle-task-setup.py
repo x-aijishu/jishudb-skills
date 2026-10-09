@@ -37,6 +37,8 @@ def bundle_files() -> dict[str, tuple[bytes, int]]:
         "client/runtime readiness, return to the calling task. Task installation\n"
         "does not grant Desktop installation, write privileges, or user consent.\n\n"
     )
+    recovery, mode = files["references/connection-recovery.md"]
+    files["references/connection-recovery.md"] = (recovery.replace(b"`SKILL.md`", b"[setup guide](../setup.md)"), mode)
     files["setup.md"] = ((note + source[frontmatter.end():].lstrip()).encode(), 0o644)
     manifest = {
         "schemaVersion": 1,

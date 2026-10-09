@@ -1,22 +1,22 @@
 {
   "schemaVersion": 1,
   "sourceSkill": "jishudb",
-  "sourceVersion": "0.1.11",
+  "sourceVersion": "0.1.12",
   "generator": "scripts/bundle-task-setup.py",
   "files": [
     {
       "path": "references/connection-recovery.md",
-      "sha256": "40a10df2e18b7e0ecb073469b77441d3dbba12695a1736c8345b5ee32c3a8281",
+      "sha256": "9720f54dfc036229de4cb71197c23e73c65ccaa0e5e7ea5f775f210f7203032d",
       "mode": "644"
     },
     {
       "path": "references/installation-contract.md",
-      "sha256": "bb02e9eb9d392f07df65ab4a21ba9493126d28ff929488748dee1fbba3f5ce71",
+      "sha256": "afb4ba01493cc4806c2e1126946ade6e6eeee8224f07b6082781e0d5b8634143",
       "mode": "644"
     },
     {
       "path": "scripts/install-macos.sh",
-      "sha256": "2d7b70f2ffef98ad818908482cad07034b117c62cbe0793b5df9b4b14b0925f9",
+      "sha256": "316b58b2f18a3bba28ac26433f5d54ac8c315f8508f41ad087e8b1feb67db1e1",
       "mode": "755"
     },
     {
@@ -26,7 +26,7 @@
     },
     {
       "path": "setup.md",
-      "sha256": "cd1117516a2f0e9d394fa7bf9ff6730d2232ec9f7f0fe15fc6b9cdc315cb3af5",
+      "sha256": "286ab3529bb20b87c67e979fa8b143beb3105decfd012500793990d2f1908811",
       "mode": "644"
     }
   ]
