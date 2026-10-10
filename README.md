@@ -119,6 +119,15 @@ Use the host's supported Skill loader and keep each full package. Copying only `
 
 <!-- 缺少：按已验证宿主分别编写的公开安装教程和 Skill 市场集合页。 -->
 
+### GitHub Copilot on github.com
+
+GitHub Copilot 可从本仓库的 [`.github/skills/research-report-hunter/`](.github/skills/research-report-hunter/SKILL.md)
+发现项目级 `research-report-hunter` Skill；该目录保留完整包及其相对路径。
+使用前需在 Copilot 宿主中配置可用且已授权的 JishuDB MCP 连接（含知识库写入权限），
+并具备获准的浏览/搜索与本地文本输出能力。内置安装指南不代表云端 Agent 能安装用户电脑上的 JishuDB。
+
+示例：`使用 research-report-hunter skill，找最近两年的低空经济研报，列出日期、链接和全文可用性。`
+
 ## JishuDB Dependency
 
 任务型 Skills 已内置 JishuDB 安装连接资源。已有授权连接时直接复用；没有连接时使用包内指南，不再要求另装 `jishudb` Skill 或从 ClawHub 下载依赖。
