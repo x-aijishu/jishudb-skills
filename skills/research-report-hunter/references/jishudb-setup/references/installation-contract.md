@@ -48,7 +48,8 @@ named artifact. The explicit macOS candidate route below is a separate opt-in.
 ## Asset transport
 
 Metadata and source-commit requests accept only a direct HTTPS `200` and never
-follow redirects. An exact API asset request accepts either a direct `200`, or
+follow redirects. An exact API asset request accepts either a direct `200` (metadata), a
+validated `206` (bounded installer range), or
 one `302` to HTTPS `release-assets.githubusercontent.com`. Validate the redirect
 before the second request, send no credentials or unrelated headers to it, and
 reject user information, fragments, another redirect, or another host.
@@ -94,6 +95,10 @@ zsh scripts/install-macos.sh plan \
   --config-target <absolute-client-config-path> \
   --connection-name jishudb
 
+zsh scripts/install-macos.sh download \
+  --plan <absolute-plan-path> \
+  --plan-sha256 <approved-lowercase-sha256>
+
 zsh scripts/install-macos.sh execute \
   --plan <absolute-plan-path> \
   --plan-sha256 <approved-lowercase-sha256>
@@ -122,6 +127,45 @@ under the old approval.
 ## Platform completion
 
 ### macOS arm64
+
+After approval, run `download` repeatedly with the same plan path and digest.
+The first invocation fetches and validates the immutable release; continuations
+revalidate that private snapshot against the approved plan. Execute re-fetches
+the release before installation. The snapshot is published atomically only after validation,
+so an interrupted request cannot become a reusable snapshot. Each step requests at most 16 MiB for at most
+20 seconds per network request. It accepts partial bytes only on a
+bounded curl timeout with an exact HTTP 206 Content-Range for the requested
+offset, end and approved total. An ignored range, changed length/encoding,
+transport error, or zero progress is a failure; it never appends that response.
+
+`download_pending` is successful progress: show byte counts and continue the
+same plan on the next host tool call. Do not loop inside one short foreground
+command, restart the download, or regenerate the plan for this state. Allow at
+least 120 seconds per step for metadata and validation overhead. Cache and
+scratch files are private, scoped to the plan directory, and guarded against
+symlinks/hard links and concurrent execution. A leftover lock after a host kill
+requires inspection, not automatic removal or overlapping retries.
+
+Only exact complete size plus SHA-256 yields `downloaded`. Then call `execute`;
+it requires that complete asset and rechecks it before any installation.
+The approved-host signed URL is kept only in the private transaction directory
+for at most five minutes between calls, revalidated before use, and removed
+when download completes. It is never printed or copied into task records. This
+avoids consuming GitHub's anonymous API quota on every chunk. A 403/429 with
+rate-limit headers returns `download_waiting` and `retryAfterSeconds`; honor
+that delay without restarting, rotating plans, or introducing credentials. A
+403 for a cached CDN URL invalidates it and returns `download_waiting` with
+`download_url_refresh_required` for one fresh lookup. A freshly issued URL
+failing the same way is terminal; do not loop on authorization failures.
+Partial downloads never authorize mounting, launching, or client setup. macOS
+plans have a two-hour lifetime displayed in the approval envelope to cover slow
+connections; do not extend or edit an approved plan. Windows plans retain their
+30-minute lifetime. An expired plan needs a new plan and approval.
+
+All helper failures include their actual stage. Diagnose timeout, network,
+range validation, checksum, Gatekeeper, mount, copy, and launch failures
+separately. Do not infer sandbox denial from exit 137 or report a verified DMG
+merely because a partial file exists.
 
 Install a fresh verified bundle to `~/Applications/JishuDB.app` without
 elevation. Mount the DMG read-only and without Finder, require exactly one

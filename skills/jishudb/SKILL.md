@@ -15,7 +15,7 @@ compatibility: >-
   the user's local machine.
 metadata:
   author: jishudb
-  version: "0.1.14"
+  version: "0.1.15"
   openclaw:
     homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/jishudb
 ---
@@ -134,9 +134,28 @@ model configuration changes. Older runtimes may not support this step.
 Show the helper's complete redacted approval envelope and ask once for the
 exact default transaction: verified download, per-user installation,
 Desktop launch, and the named non-secret client entry. After approval, pass the
-unchanged plan path and SHA-256 to `execute`. Do not recreate release logic with
+unchanged plan path and SHA-256 to the platform steps below. Do not recreate release logic with
 ad hoc commands, select a newer release, retry a failed installer, or reuse the
 approval after drift.
+
+For macOS, first call `download --plan <path> --plan-sha256 <digest>` using
+`scripts/install-macos.zsh`. Each call has a bounded transfer and returns one
+JSON result. On `download_pending`, report `downloadedBytes` / `totalBytes` and
+call `download` again with the same approved plan. These are successful
+continuations, not failed-installer retries. Use a host timeout of at least
+120 seconds per download step; do not wrap all steps in one foreground command.
+On `download_waiting`, preserve the partial file and honor `retryAfterSeconds`
+before another download call; never create a new plan to evade rate limits.
+On `downloaded`, call `execute` with that plan; it rechecks the whole asset and
+installs without downloading the DMG again. Windows retains its documented
+`execute` flow. Do not run `execute` to download a macOS installer.
+
+A failed result includes `stage` and `errorCategory`. Preserve them; an outer
+host kill or timeout alone does not prove OS/sandbox denial or a completed
+checksum. Stop on `failed`, including a stalled transfer or invalid byte range;
+never silently choose a local-only output or renew approval on the user's
+behalf. A missing/expired plan requires a fresh reviewed plan. macOS plans
+expire after two hours, shown in the envelope; Windows remains 30 minutes.
 
 For a same-machine client, state in the approval envelope that post-launch
 browser OAuth is the default when both endpoints verify support, while manual
@@ -188,6 +207,16 @@ number, background process, or successful installation alone.
 - `route=password-setup`, `route=unavailable`, a missing field, or an unknown
   schema: explain that the current installation may require ordinary app setup.
   Do not promise passwordless onboarding, silently upgrade, or disable verification.
+
+Browser consent and client connection are separate completion steps. If the
+browser shows "authorized" but remains on the handoff page, direct the user to
+click "Return to client" and confirm opening the intended host if the browser
+asks. Do this promptly; do not send them to the DB homepage or password setup.
+The host must finish the callback, token exchange, and tool discovery before
+setup is ready. On `InvalidGrantError`, check the actual callback failure and
+whether the code expired; start a fresh native authorization if needed, never
+reuse an old return link indefinitely or infer that a DB password is required.
+Do not copy authorization codes or OAuth credentials into task files or chat.
 
 The capability is discovery only, not owner proof. The fresh-Windows exception
 never applies to existing owners, later grants, enrollment, management or recovery.

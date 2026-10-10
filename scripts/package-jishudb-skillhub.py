@@ -79,6 +79,12 @@ def render_skillhub_contract(source: str) -> str:
     )
     result = replace_exact(
         result,
+        "scripts/install-macos.zsh download \\",
+        "zsh scripts/install-macos.sh download \\",
+        "macOS download command",
+    )
+    result = replace_exact(
+        result,
         "scripts/install-macos.zsh execute \\",
         "zsh scripts/install-macos.sh execute \\",
         "macOS execute command",

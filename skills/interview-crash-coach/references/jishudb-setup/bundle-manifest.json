@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "sourceSkill": "jishudb",
-  "sourceVersion": "0.1.14",
+  "sourceVersion": "0.1.15",
   "generator": "scripts/bundle-task-setup.py",
   "files": [
     {
@@ -11,12 +11,12 @@
     },
     {
       "path": "references/installation-contract.md",
-      "sha256": "1070a9b861f161c1d365633a36aac66d988cf099d1433705d1df9e83dfc42928",
+      "sha256": "3180d87de81cbe26c523369f77f53fc02a2287261dca4d6ab536955533af65a9",
       "mode": "644"
     },
     {
       "path": "scripts/install-macos.sh",
-      "sha256": "13d384f1d725268a44970fbca3657860b647c63dfa833a415dc7ab92139d9b17",
+      "sha256": "b89c4eb483f00b6ccfe4230a5235b6f2dbe6a3b299a820e9fe1930a5e3c63e59",
       "mode": "755"
     },
     {
@@ -26,7 +26,7 @@
     },
     {
       "path": "setup.md",
-      "sha256": "269ae9f83ad2c5e0df3fab98e9f5aa2043418bdaaf27c6ab27ad8df6f9d77f87",
+      "sha256": "ac86cebf39cf94448e96aee9ea8580d628afa2e2201d4d7d89065e01247fa079",
       "mode": "644"
     },
     {

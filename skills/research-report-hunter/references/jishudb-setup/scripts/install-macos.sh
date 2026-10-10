@@ -14,14 +14,19 @@ readonly RESERVED_LAN_MCP_PORT=8089
 readonly ENDPOINT_CONFIG_SCHEMA=1
 readonly ENDPOINT_CONFIG_FILENAME="desktop-endpoint.json"
 readonly MAX_RELEASE_PAGES=5
+readonly DOWNLOAD_SLICE_SECONDS=20
+readonly DOWNLOAD_SLICE_BYTES=16777216
+readonly DOWNLOAD_LOCATION_TTL_SECONDS=300
 
 MODE="${1:-}"
-[[ "$MODE" == "plan" || "$MODE" == "execute" ]] || {
-  print -u2 -- "usage: install-macos.zsh <plan|execute> [options]"
+[[ "$MODE" == "plan" || "$MODE" == "download" || "$MODE" == "execute" ]] || {
+  print -u2 -- "usage: install-macos.zsh <plan|download|execute> [options]"
   exit 2
 }
 shift
 
+CURRENT_STAGE="$MODE"
+TRANSACTION_LOCK=""
 PLAN_PATH=""
 PLAN_SHA256=""
 CANDIDATE_TAG=""
@@ -41,6 +46,9 @@ cleanup() {
   for target in "${CLEANUP_PATHS[@]}"; do
     [[ -n "$target" ]] && /bin/rm -rf -- "$target"
   done
+  if [[ -n "$TRANSACTION_LOCK" ]]; then
+    /bin/rmdir -- "$TRANSACTION_LOCK" 2>/dev/null || true
+  fi
 }
 
 trap cleanup EXIT
@@ -93,7 +101,7 @@ fail() {
   local category="$1"
   local message="$2"
   print -u2 -- "${category}: ${message}"
-  jxa result failed "$category" "$message" || true
+  jxa result failed "$category" "$message" "$CURRENT_STAGE" || true
   exit 1
 }
 
@@ -113,6 +121,31 @@ function readText(path) {
 
 function readJSON(path) {
   return JSON.parse(readText(path));
+}
+
+// AI-generated download boundary: accept only bytes from the exact requested
+// range of the approved asset. Full-file SHA-256 is still required before use.
+function validateDownloadSlice(headers, httpCode, offset, end, total, bytes, curlCode) {
+  for (const value of [offset, end, total, bytes, curlCode]) {
+    if (!Number.isSafeInteger(value) || value < 0) throw new Error('invalid slice values');
+  }
+  if (offset > end || end >= total || bytes > end - offset + 1 ||
+      ![0, 28].includes(curlCode)) throw new Error('invalid slice bounds or transfer failure');
+  const blocks = headers.trim().split(/\r?\n\r?\n/);
+  const block = blocks[blocks.length - 1];
+  const status = block.match(/^HTTP\/[^ ]+ ([0-9]{3})/);
+  if (!status || status[1] !== String(httpCode) || httpCode !== '206') {
+    throw new Error('server did not honor the requested byte range');
+  }
+  const ranges = [...block.matchAll(/^content-range:\s*bytes (\d+)-(\d+)\/(\d+)\s*$/gim)];
+  const encodings = [...block.matchAll(/^content-encoding:\s*(.+)$/gim)];
+  if (ranges.length !== 1 || Number(ranges[0][1]) !== offset ||
+      Number(ranges[0][2]) !== end || Number(ranges[0][3]) !== total ||
+      encodings.some(match => match[1].trim().toLowerCase() !== 'identity')) {
+    throw new Error('response range or encoding differs from the approved asset');
+  }
+  if (curlCode === 0 && bytes !== end - offset + 1) throw new Error('truncated successful range');
+  return bytes;
 }
 
 function exactKeys(value, keys, label) {
@@ -367,7 +400,7 @@ function assetPlan(asset, role) {
 
 function createPlan(selected, candidate, argv) {
   const now = new Date();
-  const expires = new Date(now.getTime() + 30 * 60 * 1000);
+  const expires = new Date(now.getTime() + 120 * 60 * 1000);
   return {
     schema: selected.release.prerelease === true ? 'jishudb-agent-install-plan-v3' : candidate.agentBackgroundLaunch === 1 ? 'jishudb-agent-install-plan-v2' : 'jishudb-agent-install-plan-v1',
     ...(selected.release.prerelease === true ? {releaseChannel: 'candidate'} : {}),
@@ -429,7 +462,7 @@ function validatePlan(plan) {
   const expires = new Date(plan.expiresAt);
   const now = new Date();
   if (!Number.isFinite(created.getTime()) || !Number.isFinite(expires.getTime()) ||
-      expires <= created || expires - created > 30 * 60 * 1000 || now > expires) {
+      expires <= created || expires - created > 120 * 60 * 1000 || now > expires) {
     throw new Error('plan is expired or has an invalid lifetime');
   }
   requireDesktopMCPURL(plan.connection.url);
@@ -499,6 +532,9 @@ function valueAtPath(value, path) {
 
 function run(argv) {
   const command = argv.shift();
+  if (command === 'download-slice') {
+    return String(validateDownloadSlice(readText(argv[0]), argv[1], ...argv.slice(2).map(Number)));
+  }
   if (command === 'count') {
     const value = readJSON(argv[0]);
     if (!Array.isArray(value)) throw new Error('release page must be an array');
@@ -591,7 +627,22 @@ function run(argv) {
     return 'ok';
   }
   if (command === 'result') {
-    if (argv[0] === 'failed') return JSON.stringify({status: 'failed', errorCategory: argv[1], message: argv[2]});
+    if (argv[0] === 'failed') return JSON.stringify({status: 'failed', errorCategory: argv[1], message: argv[2], stage: argv[3]});
+    if (argv[0] === 'waiting') {
+      const plan = validatePlan(readJSON(argv[1]));
+      return JSON.stringify({status: 'download_waiting', stage: 'download',
+        errorCategory: argv[5] || 'github_rate_limited', planPath: argv[1], planSha256: argv[2],
+        downloadedBytes: Number(argv[3]), totalBytes: plan.assets.installer.size,
+        retryAfterSeconds: Number(argv[4]), next: 'wait_then_repeat_download_with_same_plan'});
+    }
+    if (argv[0] === 'download') {
+      const plan = validatePlan(readJSON(argv[1]));
+      const bytes = Number(argv[3]);
+      return JSON.stringify({status: bytes === plan.assets.installer.size ? 'downloaded' : 'download_pending',
+        stage: 'download', planPath: argv[1], planSha256: argv[2], downloadedBytes: bytes,
+        totalBytes: plan.assets.installer.size, bytesThisStep: Number(argv[4]),
+        next: bytes === plan.assets.installer.size ? 'execute' : 'repeat_download_with_same_plan'});
+    }
     if (argv[0] === 'plan') {
       const plan = readJSON(argv[1]);
       return JSON.stringify({
@@ -600,6 +651,7 @@ function run(argv) {
         planSha256: argv[2],
         approval: {
           version: plan.release.version,
+          expiresAt: plan.expiresAt,
           releaseChannel: plan.releaseChannel || 'stable',
           releaseTag: plan.release.tag,
           sourceRevision: plan.release.sourceRevision,
@@ -628,18 +680,52 @@ function run(argv) {
 JXA
 }
 
+rate_limit_seconds() {
+  local headers="$1" remaining reset retry_after now
+  remaining=$(/usr/bin/awk 'tolower($1)=="x-ratelimit-remaining:" {gsub(/\r/, "", $2); print $2}' "$headers")
+  reset=$(/usr/bin/awk 'tolower($1)=="x-ratelimit-reset:" {gsub(/\r/, "", $2); print $2}' "$headers")
+  retry_after=$(/usr/bin/awk 'tolower($1)=="retry-after:" {gsub(/\r/, "", $2); print $2}' "$headers")
+  now=$(/bin/date +%s)
+  if [[ "$remaining" == 0 && "$reset" == <-> ]]; then
+    print -- $(( reset > now ? reset - now : 1 ))
+  elif [[ "$retry_after" == <-> ]]; then
+    print -- "$retry_after"
+  else
+    print -- 0
+  fi
+}
+
 api_get() {
-  local url="$1"
-  local destination="$2"
-  local http_status
+  local url="$1" destination="$2" http_status retry_seconds=0
+  local headers="${destination}.response-headers"
+  assert_private_cache_file "$headers"
+  CLEANUP_PATHS+=("$headers")
   http_status=$(/usr/bin/curl --silent --show-error --proto '=https' --tlsv1.2 \
     --connect-timeout 10 --max-time 30 --max-redirs 0 --max-filesize 16777216 \
     --header 'Accept: application/vnd.github+json' \
     --header "X-GitHub-Api-Version: ${API_VERSION}" \
-    --header 'User-Agent: jishudb-agent-install/0.1' \
-    --output "$destination" --write-out '%{http_code}' "$url") ||
-    fail "github_api_failed" "GitHub API request failed"
-  [[ "$http_status" == "200" ]] || fail "github_api_failed" "GitHub API returned HTTP ${http_status}"
+    --header 'User-Agent: jishudb-agent-install/0.1' --dump-header "$headers" \
+    --output "$destination" --write-out '%{http_code}' "$url") || {
+      /bin/rm -f -- "$destination"
+      fail "github_api_failed" "GitHub API request failed"
+    }
+  if [[ "$http_status" != "200" ]]; then
+    /bin/rm -f -- "$destination"
+    if [[ "$http_status" == "403" || "$http_status" == "429" ]]; then
+      retry_seconds=$(rate_limit_seconds "$headers")
+      if (( retry_seconds > 0 )); then
+        if [[ "$MODE" == "download" ]]; then
+          local partial="${PLAN_PATH:h}/installer.partial" bytes=0
+          assert_private_cache_file "$partial"
+          [[ ! -f "$partial" ]] || bytes=$(/usr/bin/stat -f '%z' "$partial")
+          jxa result waiting "$PLAN_PATH" "$PLAN_SHA256" "$bytes" "$retry_seconds"
+          exit 0
+        fi
+        fail "github_rate_limited" "GitHub API rate limit reached; wait ${retry_seconds} seconds before another request"
+      fi
+    fi
+    fail "github_api_failed" "GitHub API returned HTTP ${http_status}"
+  fi
 }
 
 asset_download() {
@@ -650,7 +736,7 @@ asset_download() {
   local http_status location
   /bin/rm -f -- "$destination" "$headers" "$first"
   http_status=$(/usr/bin/curl --silent --show-error --proto '=https' --tlsv1.2 \
-    --connect-timeout 10 --max-time 1800 --max-redirs 0 --max-filesize 1073741824 \
+    --connect-timeout 10 --max-time 30 --max-redirs 0 --max-filesize 16777216 \
     --header 'Accept: application/octet-stream' \
     --header "X-GitHub-Api-Version: ${API_VERSION}" \
     --header 'User-Agent: jishudb-agent-install/0.1' \
@@ -659,11 +745,11 @@ asset_download() {
   if [[ "$http_status" == "200" ]]; then
     /bin/mv -- "$first" "$destination"
   elif [[ "$http_status" == "302" ]]; then
-    location=$(/usr/bin/awk 'BEGIN{IGNORECASE=1} /^location:/ {sub(/^[^:]*:[[:space:]]*/, ""); sub(/\r$/, ""); print; exit}' "$headers")
+    location=$(/usr/bin/awk 'tolower($1)=="location:" {sub(/^[^:]*:[[:space:]]*/, ""); sub(/\r$/, ""); print; exit}' "$headers")
     [[ -n "$location" ]] || fail "invalid_asset_redirect" "asset redirect has no Location"
     jxa redirect "$url" "$location" >/dev/null || fail "invalid_asset_redirect" "asset redirect is outside the reviewed GitHub release host"
     http_status=$(/usr/bin/curl --silent --show-error --proto '=https' --tlsv1.2 \
-      --connect-timeout 10 --max-time 1800 --max-redirs 0 --max-filesize 1073741824 \
+      --connect-timeout 10 --max-time 30 --max-redirs 0 --max-filesize 16777216 \
       --header 'User-Agent:' \
       --output "$destination" --write-out '%{http_code}' "$location") ||
       fail "asset_download_failed" "GitHub release-asset request failed"
@@ -832,10 +918,10 @@ run_plan() {
   CLEANUP_PATHS=("$evidence_root")
 }
 
-run_execute() {
+validate_approved_plan() {
   [[ -z "$CANDIDATE_TAG" && -z "$CANDIDATE_REVISION" ]] || fail "invalid_arguments" "candidate selection is plan-only; execute the unchanged approved plan"
   [[ "$(/usr/bin/uname -s)" == "Darwin" && "$(/usr/bin/uname -m)" == "arm64" ]] || fail "unsupported_platform" "automatic macOS installation requires macOS arm64"
-  [[ -n "$PLAN_PATH" && "$PLAN_SHA256" =~ '^[0-9a-f]{64}$' ]] || fail "invalid_arguments" "--plan and a lowercase SHA-256 are required in execute mode"
+  [[ -n "$PLAN_PATH" && "$PLAN_SHA256" =~ '^[0-9a-f]{64}$' ]] || fail "invalid_arguments" "--plan and a lowercase SHA-256 are required in download or execute mode"
   PLAN_PATH="${PLAN_PATH:A}"
   [[ -f "$PLAN_PATH" && ! -L "$PLAN_PATH" ]] || fail "invalid_plan" "plan must be a regular non-symlink file"
   [[ "$(/usr/bin/stat -f '%u' "$PLAN_PATH")" == "$(/usr/bin/id -u)" ]] || fail "invalid_plan" "plan is not owned by the current user"
@@ -843,6 +929,158 @@ run_execute() {
   [[ "$(file_sha256 "$PLAN_PATH")" == "$PLAN_SHA256" ]] || fail "plan_digest_mismatch" "plan SHA-256 does not match the approved digest"
   jxa validate-plan "$PLAN_PATH" "$(/usr/bin/id -u)" >/dev/null || fail "invalid_plan" "plan is expired or outside the reviewed contract"
 
+  local transaction_root="${PLAN_PATH:h}"
+  [[ -d "$transaction_root" && ! -L "$transaction_root" &&
+     "$(/usr/bin/stat -f '%u:%Lp' "$transaction_root")" == "$(/usr/bin/id -u):700" ]] ||
+    fail "unsafe_transaction" "plan directory must be private and owned by the current user"
+  /bin/mkdir -m 700 -- "${transaction_root}/transfer.lock" 2>/dev/null ||
+    fail "transaction_busy" "another operation or interrupted host owns this plan; inspect it before continuing"
+  TRANSACTION_LOCK="${transaction_root}/transfer.lock"
+}
+
+# AI-generated file boundary: reject foreign files and links before using cached
+# data. Cache presence never substitutes for complete size and digest validation.
+assert_private_cache_file() {
+  local target="$1"
+  [[ ! -L "$target" ]] || fail "unsafe_cache" "cached asset must not be a symlink"
+  if [[ -e "$target" ]]; then
+    [[ -f "$target" && "$(/usr/bin/stat -f '%u:%Lp:%l' "$target")" == "$(/usr/bin/id -u):600:1" ]] ||
+      fail "unsafe_cache" "cached asset must be a private current-user regular file without hard links"
+  fi
+}
+
+run_download() {
+  validate_approved_plan
+  local root="${PLAN_PATH:h}" release_path partial_path installer_path url expected_size expected_sha
+  local offset end chunk headers first http_status location curl_code=0 received added=0
+  release_path="${root}/download-release.json"
+  partial_path="${root}/installer.partial"
+  installer_path="${root}/$(jxa plan-value "$PLAN_PATH" 'assets.installer.name')"
+  assert_private_cache_file "$partial_path"
+  assert_private_cache_file "$installer_path"
+  assert_private_cache_file "$release_path"
+  # One pre-download release snapshot per approved transaction. Execute fetches
+  # the release again before and after complete-asset verification.
+  if [[ ! -f "$release_path" ]]; then
+    local release_draft
+    release_draft=$(/usr/bin/mktemp "${root}/release-snapshot.XXXXXX")
+    CLEANUP_PATHS+=("$release_draft")
+    api_get "${API_ORIGIN}/repos/${RELEASE_REPOSITORY}/releases/$(jxa plan-value "$PLAN_PATH" 'release.id')" "$release_draft"
+    jxa release-match "$release_draft" "$PLAN_PATH" >/dev/null || fail "release_drift" "release changed before download"
+    /bin/mv -- "$release_draft" "$release_path"
+  fi
+  jxa release-match "$release_path" "$PLAN_PATH" >/dev/null || fail "release_drift" "cached release differs from the approved plan"
+  expected_size=$(jxa plan-value "$PLAN_PATH" 'assets.installer.size')
+  expected_sha=$(jxa plan-value "$PLAN_PATH" 'assets.installer.sha256')
+  if [[ -f "$installer_path" ]]; then
+    assert_size "$installer_path" "$expected_size" installer
+    assert_digest "$installer_path" "$expected_sha" installer
+    assert_private_cache_file "${root}/download-location.txt"
+    /bin/rm -f -- "$partial_path" "${root}/download-location.txt"
+    jxa result download "$PLAN_PATH" "$PLAN_SHA256" "$expected_size" 0
+    return
+  fi
+  if [[ ! -e "$partial_path" ]]; then
+    ( setopt noclobber; : > "$partial_path" ) || fail "unsafe_cache" "partial file appeared concurrently"
+  fi
+  offset=$(/usr/bin/stat -f '%z' "$partial_path")
+  (( offset <= expected_size )) || fail "asset_size_mismatch" "partial asset exceeds approved size"
+  if (( offset < expected_size )); then
+    end=$(( offset + DOWNLOAD_SLICE_BYTES - 1 ))
+    (( end < expected_size )) || end=$(( expected_size - 1 ))
+    local slice_root
+    slice_root=$(/usr/bin/mktemp -d "${root}/slice.XXXXXX")
+    CLEANUP_PATHS+=("$slice_root")
+    chunk="${slice_root}/bytes"
+    headers="${slice_root}/headers"
+    first="${slice_root}/api-body"
+    url=$(jxa plan-value "$PLAN_PATH" 'assets.installer.url')
+    local location_cache="${root}/download-location.txt" cache_age using_cached_location=0
+    assert_private_cache_file "$location_cache"
+    http_status=""
+    if [[ -f "$location_cache" ]]; then
+      cache_age=$(( $(/bin/date +%s) - $(/usr/bin/stat -f '%m' "$location_cache") ))
+      if (( cache_age >= 0 && cache_age < DOWNLOAD_LOCATION_TTL_SECONDS )); then
+        (( $(/usr/bin/stat -f '%z' "$location_cache") <= 8192 )) || fail "invalid_asset_redirect" "cached redirect exceeds the length limit"
+        location=$(<"$location_cache")
+        using_cached_location=1
+        jxa redirect "$url" "$location" >/dev/null || fail "invalid_asset_redirect" "cached redirect is outside the reviewed GitHub host"
+        http_status="302"
+      else
+        /bin/rm -- "$location_cache"
+      fi
+    fi
+    if [[ -z "$http_status" ]]; then
+      # Fetch a fresh signed redirect only when needed, rather than exhausting
+      # anonymous GitHub API quota on every range. Never print the signed URL.
+      http_status=$(/usr/bin/curl --silent --show-error --proto '=https' --tlsv1.2 \
+        --connect-timeout 10 --max-time "$DOWNLOAD_SLICE_SECONDS" --max-redirs 0 \
+        --max-filesize "$DOWNLOAD_SLICE_BYTES" --range "${offset}-${end}" \
+        --header 'Accept: application/octet-stream' --header "X-GitHub-Api-Version: ${API_VERSION}" \
+        --header 'User-Agent: jishudb-agent-install/0.1' \
+        --dump-header "$headers" --output "$first" --write-out '%{http_code}' "$url") || curl_code=$?
+      if [[ "$http_status" == "403" || "$http_status" == "429" ]]; then
+        local retry_seconds
+        retry_seconds=$(rate_limit_seconds "$headers")
+        if (( retry_seconds > 0 )); then
+          jxa result waiting "$PLAN_PATH" "$PLAN_SHA256" "$offset" "$retry_seconds"
+          return
+        fi
+      fi
+      if [[ "$http_status" == "302" && "$curl_code" == 0 ]]; then
+        location=$(/usr/bin/awk 'tolower($1)=="location:" {sub(/^[^:]*:[[:space:]]*/, ""); sub(/\r$/, ""); print; exit}' "$headers")
+        jxa redirect "$url" "$location" >/dev/null || fail "invalid_asset_redirect" "asset redirect is outside the reviewed GitHub host"
+        /usr/bin/printf '%s' "$location" > "${slice_root}/location"
+        /bin/mv -- "${slice_root}/location" "$location_cache"
+      fi
+    fi
+    if [[ "$http_status" == "302" && "$curl_code" == 0 ]]; then
+      http_status=$(/usr/bin/curl --silent --show-error --proto '=https' --tlsv1.2 \
+        --connect-timeout 10 --max-time "$DOWNLOAD_SLICE_SECONDS" --max-redirs 0 \
+        --max-filesize "$DOWNLOAD_SLICE_BYTES" --range "${offset}-${end}" \
+        --header 'User-Agent:' --dump-header "$headers" \
+        --output "$chunk" --write-out '%{http_code}' "$location") || curl_code=$?
+    elif [[ "$http_status" == "206" ]]; then
+      /bin/mv -- "$first" "$chunk"
+    else
+      fail "asset_download_failed" "GitHub asset request failed (curl ${curl_code}, HTTP ${http_status}); cached bytes were not advanced"
+    fi
+    if [[ "$http_status" == "403" || "$http_status" == "429" ]]; then
+      local cdn_retry_seconds
+      cdn_retry_seconds=$(rate_limit_seconds "$headers")
+      if (( cdn_retry_seconds > 0 )); then
+        jxa result waiting "$PLAN_PATH" "$PLAN_SHA256" "$offset" "$cdn_retry_seconds"
+        return
+      fi
+      /bin/rm -f -- "$location_cache"
+      if [[ "$http_status" == "403" && "$using_cached_location" == 1 ]]; then
+        # Refresh an expired cached URL once. A newly issued URL failing the
+        # same way is terminal, not an unbounded authorization retry loop.
+        jxa result waiting "$PLAN_PATH" "$PLAN_SHA256" "$offset" 1 download_url_refresh_required
+        return
+      fi
+    fi
+    [[ "$http_status" == "206" ]] || fail "asset_download_failed" "GitHub CDN request failed (curl ${curl_code}, HTTP ${http_status}); cached bytes were not advanced"
+    [[ -f "$chunk" ]] || fail "asset_download_failed" "download produced no data (curl ${curl_code}, HTTP ${http_status})"
+    received=$(/usr/bin/stat -f '%z' "$chunk")
+    jxa download-slice "$headers" "$http_status" "$offset" "$end" "$expected_size" "$received" "$curl_code" >/dev/null ||
+      fail "invalid_download_slice" "download range was not valid (curl ${curl_code}, HTTP ${http_status}); cached bytes were not advanced"
+    (( received > 0 )) || fail "download_stalled" "download made no progress within the bounded step"
+    /bin/cat -- "$chunk" >> "$partial_path"
+    added="$received"
+    offset=$(/usr/bin/stat -f '%z' "$partial_path")
+  fi
+  if (( offset == expected_size )); then
+    CURRENT_STAGE="verification"
+    assert_digest "$partial_path" "$expected_sha" installer
+    /bin/mv -- "$partial_path" "$installer_path"
+    /bin/rm -f -- "${root}/download-location.txt"
+  fi
+  jxa result download "$PLAN_PATH" "$PLAN_SHA256" "$offset" "$added"
+}
+
+run_execute() {
+  validate_approved_plan
   local app_path data_root release_id version revision installer_name mcp_url mcp_port
   app_path=$(jxa plan-value "$PLAN_PATH" 'installation.applicationPath')
   data_root=$(jxa plan-value "$PLAN_PATH" 'installation.dataRoot')
@@ -864,14 +1102,19 @@ run_execute() {
   candidate_path="${transaction_root}/$(jxa plan-value "$PLAN_PATH" 'assets.candidate.name')"
   mount_point="${transaction_root}/mount"
   staging_root="${HOME}/Applications/.JishuDB.installing.$(/usr/bin/uuidgen)"
-  CLEANUP_MOUNT="$mount_point"
-  CLEANUP_PATHS+=("$mount_point" "$staging_root" "$installer_path" "$checksum_path" "$candidate_path" "$release_path")
+  CLEANUP_PATHS+=("$checksum_path" "$candidate_path" "$release_path")
+  assert_private_cache_file "$installer_path"
+  [[ -f "$installer_path" ]] || fail "download_required" "run download with the approved plan until status is downloaded before execute"
+  assert_private_cache_file "$checksum_path"
+  assert_private_cache_file "$candidate_path"
+  assert_private_cache_file "$release_path"
+  [[ ! -e "$mount_point" && ! -L "$mount_point" ]] || fail "unsafe_transaction" "mount path already exists"
 
   api_get "${API_ORIGIN}/repos/${RELEASE_REPOSITORY}/releases/${release_id}" "$release_path"
   jxa release-match "$release_path" "$PLAN_PATH" >/dev/null || fail "release_drift" "release changed after approval"
   asset_download "$(jxa plan-value "$PLAN_PATH" 'assets.candidate.url')" "$candidate_path"
   asset_download "$(jxa plan-value "$PLAN_PATH" 'assets.checksum.url')" "$checksum_path"
-  asset_download "$(jxa plan-value "$PLAN_PATH" 'assets.installer.url')" "$installer_path"
+  CURRENT_STAGE="verification"
   assert_size "$candidate_path" "$(jxa plan-value "$PLAN_PATH" 'assets.candidate.size')" "candidate"
   assert_size "$checksum_path" "$(jxa plan-value "$PLAN_PATH" 'assets.checksum.size')" "checksum"
   assert_size "$installer_path" "$(jxa plan-value "$PLAN_PATH" 'assets.installer.size')" "installer"
@@ -892,6 +1135,9 @@ run_execute() {
     signed_team=$(jxa plan-value "$PLAN_PATH" 'publisher.teamIdentifier')
     verify_signed_artifact "$installer_path" "$signed_team" dmg
   fi
+  CURRENT_STAGE="mount"
+  CLEANUP_MOUNT="$mount_point"
+  CLEANUP_PATHS+=("$mount_point" "$staging_root")
   /bin/mkdir -m 700 -- "$mount_point"
   /usr/bin/hdiutil attach -readonly -nobrowse -mountpoint "$mount_point" "$installer_path" >/dev/null || fail "installer_mount_failed" "verified DMG could not be mounted read-only"
   [[ -d "${mount_point}/JishuDB.app" && ! -L "${mount_point}/JishuDB.app" ]] || fail "installer_content_invalid" "DMG does not contain one regular JishuDB.app"
@@ -910,6 +1156,7 @@ run_execute() {
   [[ -f "$manifest_path" && ! -L "$manifest_path" ]] || fail "installer_content_invalid" "release manifest is missing"
   jxa manifest "$manifest_path" "$version" "$revision" >/dev/null || fail "installer_content_invalid" "release manifest does not match the plan"
 
+  CURRENT_STAGE="install"
   /bin/mkdir -p -m 700 -- "${HOME}/Applications"
   /bin/mkdir -m 700 -- "$staging_root"
   /usr/bin/ditto --rsrc --extattr "${mount_point}/JishuDB.app" "${staging_root}/JishuDB.app" || fail "installer_copy_failed" "validated application bundle could not be staged"
@@ -924,6 +1171,7 @@ run_execute() {
   [[ -z "$signed_team" ]] || verify_signed_artifact "$app_path" "$signed_team" app
   [[ -f "${app_path}/Contents/Resources/runtime/jishudb" && ! -L "${app_path}/Contents/Resources/runtime/jishudb" ]] || fail "installed_receipt_invalid" "installed runtime receipt is invalid"
   jxa manifest "${app_path}/Contents/Resources/runtime/RELEASE-MANIFEST.json" "$version" "$revision" >/dev/null || fail "installed_receipt_invalid" "installed release manifest does not match the plan"
+  CURRENT_STAGE="launch"
   write_endpoint_config "$data_root" "$mcp_url"
   if [[ "$(jxa plan-value "$PLAN_PATH" 'schema')" != "jishudb-agent-install-plan-v1" ]]; then
     /usr/bin/open -g "$app_path" --args --jishudb-agent-background || fail "desktop_launch_failed" "installed Desktop could not be launched in background"
@@ -935,6 +1183,8 @@ run_execute() {
 
 if [[ "$MODE" == "plan" ]]; then
   run_plan
+elif [[ "$MODE" == "download" ]]; then
+  run_download
 else
   run_execute
 fi
