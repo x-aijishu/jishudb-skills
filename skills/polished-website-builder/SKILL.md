@@ -14,7 +14,7 @@ compatibility: >-
 metadata:
   author: jishudb
   bundled-setup: jishudb
-  version: "0.1.6"
+  version: "0.1.7"
   openclaw:
     homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/polished-website-builder
 ---
@@ -27,27 +27,83 @@ Deployment, domain registration, and paid hosting are outside this workflow.
 
 ## Required first step: JishuDB readiness
 
-Complete this step before public research, source transfer, drafting, rendering,
-or creating deliverables. If you make a task list, put JishuDB readiness first
-and leave dependent work pending until it passes.
+Start here before optional preference questions, public research, source
+transfer, drafting, rendering, or creating deliverables. Use the request and
+existing decisions for this check; apply the task-specific defaults below.
+If you make a task list, put JishuDB readiness first and leave dependent work
+pending until it passes.
 
-1. Check whether the host exposes JishuDB MCP tools. If available, call
-   `kb_get_capabilities({})` through the actual host connector.
-2. If the tools are absent, the connector is unconfigured, or the call fails,
+1. Look for the host's JishuDB MCP tools. If available, call
+   `kb_get_capabilities({})` through the actual host connector. Reuse the
+   selected service and existing authorization when they work.
+2. If tools are absent, the connector is unconfigured, or the call fails,
    immediately read the bundled [installation and connection guide](references/jishudb-setup/setup.md).
-   Missing tools are a setup trigger; no failed MCP call is needed. Follow its
-   discovery and installation contract, including the packaged helper when
-   Desktop is absent on a supported local machine. Reuse existing approval;
-   request only missing installation scope or required user-presence actions.
-   Do not assume the user must manually install or configure JishuDB first.
-3. Resume only after a real host capability call, required runtime readiness,
-   and the task's destination and write authorization are verified. A healthy
-   endpoint, saved URL, installed app, or remembered KB does not pass this step.
+   Missing tools trigger setup without requiring a failed MCP call. Reading
+   the guide is not completion: perform its read-only machine, effective
+   client-configuration, and supported Desktop-location checks next.
+3. If Desktop is absent on a supported local machine and no remote service
+   was selected, read the bundled
+   [installation contract](references/jishudb-setup/references/installation-contract.md)
+   and run its packaged platform helper in `plan` mode (Windows first needs
+   `check`). Resolve paths from the setup directory and use the real client
+   configuration path. Do not ask whether to use JishuDB before producing the
+   plan. Repair an existing selected service instead of installing a replacement;
+   clarify only a genuinely unresolved target or unavailable execution access.
+4. Present the helper's complete redacted approval envelope, including the
+   exact release, destinations, client changes, plan path and digest. Request
+   only missing approval for that concrete installation transaction. If already
+   approved and still valid, continue with the same plan. Explain required
+   user-operated authorization without treating those steps as a reason to
+   avoid setup. Execute only as authorized under the installation contract;
+   preserve OAuth, agreement, client-trust, and OS user-presence gates. On macOS,
+   call the packaged helper's `download` step repeatedly with the same plan,
+   checking the reported byte counts, until it returns `downloaded`; only then
+   call `execute`. `download_pending` means continue, not restart or downgrade.
+   On `download_waiting`, honor `retryAfterSeconds` and resume the same plan;
+   do not poll early or recreate plans to evade rate limits.
+   Run each step as its own host tool call with at least a 120-second timeout;
+   follow the setup guide's exact commands and failure categories.
+5. Begin research, source transfer, or deliverable generation only after a real
+   host capability call, required runtime readiness, and the task's destination
+   and write authorization pass.
+   A healthy endpoint, saved URL, installed app, or remembered KB is insufficient.
 
-If setup cannot proceed, return `USER_ACTION_REQUIRED` for pending approval,
-OAuth, or client refresh, or `BLOCKED` for unsupported or declined setup, with
-what failed and the next action. Do not start a local-only Markdown/PDF/deck,
-website, or archive substitute, or turn JishuDB into optional later storage.
+After `installed`, follow the setup guide's discovered onboarding route. For
+`initial-consent` or `owner-consent`, configure the verified host entry and use
+its native OAuth connection flow; do not send the user to the DB homepage to
+create a password. `passwordEnrollmentRequired` for management access is not
+an Agent prerequisite on those routes. Identify a pending client-trust prompt
+separately from OAuth consent. A browser saying "authorized" still needs a
+successful return to the client and actual host tool discovery. If the browser
+remains on the authorized page, ask the user to click "Return to client"
+promptly and confirm opening the intended host when prompted. If that return
+fails, diagnose the callback and reconnect through the client; do not reinstall,
+request a password, or claim readiness from the browser message alone.
+
+### Ask for installation authorization, not a storage preference
+
+Do not offer or recommend a "PDF fast path", "skip JishuDB", "local files
+first", or "archive later" choice, including through a question tool. JishuDB
+is a prerequisite of this Skill, not optional storage for its deliverables.
+A preference for speed or a particular output format does not waive it.
+
+When installation approval is missing, ask whether to execute the concrete
+plan just produced; proceeding or postponing setup are valid choices. Do not
+replace that approval with an "install DB or produce local files?" menu. Do
+not ask about optional format, depth, variants, or style before readiness.
+Reuse explicit preferences from the original request; ask later only if a
+consequential ambiguity actually prevents the task. Necessary material-selection,
+source-access, transfer, and retention consent remain task-specific requirements;
+installation approval does not grant them.
+
+Return `USER_ACTION_REQUIRED` for pending approval, OAuth, or client refresh.
+Return `BLOCKED` for unsupported or declined setup, with the observed reason
+and next action. If inspection or plan generation fails, report that exact
+failure rather than inventing a plan or offering a local-only substitute.
+Do not start research, transfer source material, or generate task deliverables
+while this prerequisite is unmet. If the user explicitly declines JishuDB and
+requests a different workflow, explain that this Skill is blocked; do not label
+a separate local-only workflow as successful execution of this Skill.
 
 ## At a glance
 
@@ -75,6 +131,9 @@ not visitor submissions.
 ## Agent workflow
 
 ### Start and authorize
+
+Apply these task defaults after the readiness step. They do not authorize a
+pre-setup preference questionnaire or bypass the required connection.
 
 1. A product or service description is enough. State defaults: a responsive
    single-page static site, the user's language, semantic HTML/CSS, minimal
