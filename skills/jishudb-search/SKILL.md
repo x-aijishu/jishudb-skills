@@ -14,7 +14,7 @@ compatibility: >-
   a reachable JISHUDB_URL, with JISHUDB_TOKEN when authentication is enabled.
 metadata:
   author: jishushell-team
-  version: "0.1.2"
+  version: "0.1.3"
   openclaw:
     homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/jishudb-search
 # Retain legacy discovery hints; command registration is host-specific.
@@ -51,6 +51,16 @@ The `/kb` field is a legacy hint, not a portable command registration; use the
 host's supported Skill loader if no such command exists.
 
 ## Agent workflow
+
+If the required host tools are absent or the connection fails, do not answer
+from memory, public-web results, or local files as a substitute. Diagnose the
+existing selected service; use the documented HTTP helper only for its supported
+read operations with an already configured authorized endpoint. If neither
+route can serve the request, report `USER_ACTION_REQUIRED` for pending client
+connection/authorization or `BLOCKED` for unavailable access. Offer setup or
+repair as the next action; invoke `jishudb` only if available and authorized.
+Do not install an empty local database to answer a question about existing
+material, silently change targets, or require a separate Skill download.
 
 Use the loaded authenticated MCP connector first. Reuse the selected KB;
 resolve routine read-only choices from live results instead of asking the user

@@ -1,6 +1,7 @@
 # Recover a JishuDB MCP connection
 
-Use this workflow when setup or a task encounters an unavailable connection.
+Use this workflow when JishuDB tools are absent, client configuration is empty,
+or setup or a task encounters an unavailable connection.
 Keep the user's intended machine and knowledge base explicit. A connection
 repair is complete only when the actual host client can use that service.
 
@@ -13,18 +14,23 @@ belongs to the client, not necessarily the agent's shell. Run local probes on
 the intended service machine through an already authorized remote connection
 when appropriate. Never substitute the diagnostic agent's own localhost.
 
-Reuse a target already chosen by the user. Otherwise explain the current target
-and observed failure, then offer only choices supported by the evidence:
+Reuse a target already chosen by the user. If no target was selected and no
+client entry or Desktop installation exists on a supported local machine,
+continue to the local Desktop read-only installation plan in `SKILL.md`.
+Present the concrete plan for any missing installation approval; do not ask a
+separate target-selection question merely because this is a first install.
 
-- Use the existing local Desktop installation, if found on the client machine.
-- Repair the configured remote service, or use another user-supplied remote URL.
-- Set up Desktop if absent, or postpone this task while the owner restores access.
+If a configured target fails or conflicts with the request, explain that target
+and observed failure, then offer only relevant recovery choices: repair the
+existing local Desktop, repair the selected remote service, use a user-supplied
+remote URL, or plan a local Desktop installation. Ask only when these represent
+a genuinely unresolved choice. Never replace an explicitly selected service.
 
-Recommend local Desktop only when the task calls for the local knowledge base
-and the installation exists. A remote URL in old configuration is neither a
-new user instruction nor proof of the wrong target. Do not silently switch
-between databases, install another copy, or promise a connection before probes.
-No answer means the target remains unresolved; elapsed time is not consent.
+A remote URL in old configuration or memory is neither a new user instruction
+nor proof of the wrong target. Do not probe remembered ports, copy old
+credentials, silently switch databases, or claim readiness before host calls.
+No answer to a required choice or approval means it remains unresolved;
+elapsed time is not consent. Missing tools do not authorize local-only output.
 
 ## Diagnose the failing layer
 

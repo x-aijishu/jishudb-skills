@@ -5,6 +5,22 @@
 Use this contract for task scope, existing authorization, and bounded recovery.
 It does not grant account access, installation, publication, or new write scope.
 
+## Required JishuDB setup precedes task work
+
+Missing host tools and an empty MCP configuration trigger the packaged
+installation and connection guide (`references/jishudb-setup/setup.md`
+relative to the calling task Skill), just as a failed connection
+does. Read it immediately; follow discovery, the installation contract, and
+client/runtime verification. Do not wait for a callable MCP tool or ask the user
+to arrange setup independently. Reuse authorized scope and preserve required
+installation approval, OAuth, agreement, and OS user-presence gates.
+
+Keep public research, source transfer, drafting, and rendering pending until
+required JishuDB readiness, destination, and write scope pass. Put this
+prerequisite first in any task list. Return `USER_ACTION_REQUIRED` or `BLOCKED`
+with the concrete next action if setup cannot proceed. Do not replace required
+JishuDB persistence with local files or promise optional later archival.
+
 ## Start without an intake form
 
 - The user's explicit count, format, language, and constraints override every
@@ -37,7 +53,8 @@ It does not grant account access, installation, publication, or new write scope.
   calls or two minutes, whichever comes first, per route. Do not reverse-engineer
   installed bundles, guess undocumented DSLs, or start a new toolchain merely
   to finish content. Switch once to a known available fallback; otherwise
-  report the missing capability and preserve useful output.
+  report the missing capability and preserve useful output. These fallback
+  rules apply to output tools, never to required JishuDB setup or persistence.
 - For a transient read/render failure, retry once, respecting Retry-After, then
   use the fallback or report the gap. Authentication, permission, unsupported
   format, and invalid-input failures require their specific recovery, not a
@@ -54,7 +71,9 @@ It does not grant account access, installation, publication, or new write scope.
   Do not add more outputs or cosmetic passes. While working, give brief progress
   at stage changes or after about a minute without visible results. A blocked
   export or persistence step must not hide already-created files: return PARTIAL
-  with their paths, missing checks, and the specific recovery action.
+  with their paths, missing checks, and the specific recovery action. This
+  covers a later failure after readiness passed; it does not authorize new
+  content generation while initial JishuDB setup is blocked.
 
 ## Keep evidence and persistence proportional
 

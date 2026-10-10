@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "sourceSkill": "jishudb",
-  "sourceVersion": "0.1.13",
+  "sourceVersion": "0.1.14",
   "generator": "scripts/bundle-task-setup.py",
   "files": [
     {
       "path": "references/connection-recovery.md",
-      "sha256": "9720f54dfc036229de4cb71197c23e73c65ccaa0e5e7ea5f775f210f7203032d",
+      "sha256": "a80bc3ca60e608c5bcf1124dc5a7212147ca9ab1ee1887eb7584177fb11ed9b4",
       "mode": "644"
     },
     {
@@ -26,12 +26,12 @@
     },
     {
       "path": "setup.md",
-      "sha256": "286ab3529bb20b87c67e979fa8b143beb3105decfd012500793990d2f1908811",
+      "sha256": "269ae9f83ad2c5e0df3fab98e9f5aa2043418bdaaf27c6ab27ad8df6f9d77f87",
       "mode": "644"
     },
     {
       "path": "task-execution.md",
-      "sha256": "a6d8753b62a34c8c4ed004087a14a5ceca9023b90260268cb6cc3ce9c5073602",
+      "sha256": "5d84b98c09a116191b393748041c1a6c6a2798784cd89269f77080e4d8045eb1",
       "mode": "644"
     }
   ]

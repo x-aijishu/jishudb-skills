@@ -38,6 +38,23 @@ authorize an acceptance run.
 
 ## Agent workflow
 
+### Start when tools are missing
+
+An absent JishuDB tool catalog, an empty MCP configuration, and a failed
+connection all require this setup workflow. Do not wait for a tool call that
+the host cannot make, or tell the calling task to produce local-only output.
+First resolve the intended machine and target using the route below. If
+Desktop is absent on a supported local machine and no remote target was
+selected, continue to the packaged installation contract and read-only plan;
+obtain any missing installation approval before applying it. An explicitly
+selected remote service must be repaired on its own route, not replaced.
+
+After installation, finish client registration, user-operated authorization,
+and actual host tool discovery/capability and runtime checks before returning
+to the task. If the host must refresh or the user must act, return
+`USER_ACTION_REQUIRED` with the specific next action; unsupported or declined
+setup is `BLOCKED`. Neither state permits the calling task to skip JishuDB.
+
 ### Choose the route
 
 1. Establish whether this Agent runs on the target machine. A cloud, container,
@@ -66,7 +83,7 @@ authorize an acceptance run.
 
 ### Recover an unavailable connection
 
-When an existing MCP connection fails, read
+When JishuDB tools are missing, no client entry exists, or a connection fails, read
 [references/connection-recovery.md](references/connection-recovery.md).
 Diagnose the configured target, service startup, authentication, and actual
 client separately. Offer only relevant recovery choices; honor a target or

@@ -11,7 +11,7 @@ description: >-
 compatibility: Requires a host agent with a configured JishuDB MCP connector. The all-tools mode requires the jishudb profile. Optional direct-upload coverage requires the host to perform the returned raw HTTP PUT.
 metadata:
   author: jishudb
-  version: "0.1.3"
+  version: "0.1.4"
   openclaw:
     homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/jishudb-mcp-check
   target-contract: "jishudb-mcp-v2"
@@ -48,6 +48,15 @@ returns no results. Use `jishudb` for initial setup and connection repair, or
 the mutation approval described below.
 
 ## Agent workflow
+
+If the host does not expose the selected JishuDB connector, mark the connection
+precondition `BLOCKED`, report overall `PARTIAL`, and leave dependent tests
+unrun. State whether host reconnection, authorization, or separate setup is
+needed. If a capability call can be made but fails, apply the preflight `FAIL`
+rule and preserve its observed cause. Do not invent results, replace MCP checks
+with local artifacts, or install another database to make the test pass.
+Setup/repair is a separate user-authorized operation; after it completes, rerun
+the checks through the intended host connector.
 
 This is a consumer-level functional test. Do not claim raw MCP envelope,
 header, or protocol conformance unless the host exposes those surfaces.
@@ -95,15 +104,16 @@ the running catalog with this Skill version. For `all-tools`, also read
 - `FAIL`: prerequisites existed but behavior or output was wrong.
 - `SKIP`: an optional server capability or optional host observation is
   unavailable.
-- `BLOCKED`: a visible tool's positive path requires an external prerequisite
-  or host capability that was not supplied.
+- `BLOCKED`: the connector is absent, or a visible tool's positive path
+  requires an external prerequisite or host capability that was not supplied.
 
 Use `PARTIAL` overall when there are no failures but at least one case is
 `BLOCKED`.
 
 ### Preflight
 
-1. Confirm the host exposes the JishuDB connector.
+1. Confirm the host exposes the JishuDB connector. If absent, report the
+   blocked precondition and stop before calling tools or creating fixtures.
 2. Call `kb_get_capabilities`.
 3. Stop with `FAIL` if the call fails or the tool contract is not
    `jishudb-mcp-v2`.

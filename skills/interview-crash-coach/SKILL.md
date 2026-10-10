@@ -14,7 +14,7 @@ compatibility: >-
 metadata:
   author: jishudb
   bundled-setup: jishudb
-  version: "0.1.5"
+  version: "0.1.6"
   openclaw:
     homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/interview-crash-coach
 ---
@@ -24,6 +24,30 @@ metadata:
 Start useful preparation without a resume. JishuDB is required for public
 research and the preparation pack; saving personal answers or feedback is
 optional and requires explicit approval separate from that general write scope.
+
+## Required first step: JishuDB readiness
+
+Complete this step before public research, source transfer, drafting, rendering,
+or creating deliverables. If you make a task list, put JishuDB readiness first
+and leave dependent work pending until it passes.
+
+1. Check whether the host exposes JishuDB MCP tools. If available, call
+   `kb_get_capabilities({})` through the actual host connector.
+2. If the tools are absent, the connector is unconfigured, or the call fails,
+   immediately read the bundled [installation and connection guide](references/jishudb-setup/setup.md).
+   Missing tools are a setup trigger; no failed MCP call is needed. Follow its
+   discovery and installation contract, including the packaged helper when
+   Desktop is absent on a supported local machine. Reuse existing approval;
+   request only missing installation scope or required user-presence actions.
+   Do not assume the user must manually install or configure JishuDB first.
+3. Resume only after a real host capability call, required runtime readiness,
+   and the task's destination and write authorization are verified. A healthy
+   endpoint, saved URL, installed app, or remembered KB does not pass this step.
+
+If setup cannot proceed, return `USER_ACTION_REQUIRED` for pending approval,
+OAuth, or client refresh, or `BLOCKED` for unsupported or declined setup, with
+what failed and the next action. Do not start a local-only Markdown/PDF/deck,
+website, or archive substitute, or turn JishuDB into optional later storage.
 
 ## At a glance
 
@@ -59,14 +83,10 @@ approval does not authorize retention of personal answers or feedback.
 2. Follow the packaged [task execution defaults](references/jishudb-setup/task-execution.md).
    Reuse existing decisions and authorization; ask only for an unresolved target,
    consequential ambiguity, or genuinely missing permission.
-3. Use the host's loaded JishuDB tools and call `kb_get_capabilities({})`.
-   Check only the needed live schemas, write support, and relevant limits;
-   read `kb_read_handbook({})` only for unfamiliar behavior. If the actual
-   connection fails, diagnose that failure through the bundled
-   [installation and connection guide](references/jishudb-setup/setup.md).
-   Reuse the selected local/remote target and existing consent. Preserve
-   OS/browser user-presence gates; do not continue with a local-only archive
-   substitute when required JishuDB setup is unavailable.
+3. Complete the JishuDB readiness step above. Inspect only the needed live
+   schemas, write support, and relevant limits; read `kb_read_handbook({})`
+   only for unfamiliar behavior. Continue with the verified connector and
+   existing consent; do not repeat successful setup or authorization.
 4. Call `kb_list({})` and resolve the previously selected or authorized default
    KB to a returned ID. Reuse consent covering this task's source and output
    retention. If missing, propose one suitable returned destination and obtain
