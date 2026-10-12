@@ -13,7 +13,7 @@ compatibility: >-
 metadata:
   author: jishudb
   bundled-setup: jishudb
-  version: "0.1.9"
+  version: "0.1.10"
   openclaw:
     homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/data-evidence-finder
 ---

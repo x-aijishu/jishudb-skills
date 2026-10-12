@@ -9,6 +9,7 @@ import path from 'node:path';
 import test from 'node:test';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
+import { renewCatalogPayload } from './fixtures/mirror-catalog-renewal.mjs';
 
 const require = createRequire(import.meta.url);
 const catalog = require('../skills/jishudb/scripts/release-mirror-catalog.cjs');
@@ -421,4 +422,68 @@ test('linked Python uninstall caches cannot be admitted as harmless residue', as
   await assert.rejects(h.helper.runExecute(args(approval), h.environment), error => error.category === 'application_state_requires_review');
   assert.equal(h.interactiveLaunches.length, 0);
   assert.equal(fs.readFileSync(outside, 'utf8'), 'must survive');
+});
+
+
+test('schema 2 renewals preserve native release identity through Windows plan, download and execute', async t => {
+  const h = await harness(t);
+  const originalPayload = structuredClone(h.payload);
+  const originalApproval = await h.plan();
+  Object.assign(h.payload, renewCatalogPayload(h.payload));
+  const renewalApproval = await h.plan();
+  Object.assign(h.payload, renewCatalogPayload(h.payload));
+  const latestApproval = await h.plan();
+  for (const approval of [originalApproval, renewalApproval, latestApproval]) {
+    const outer = JSON.parse(fs.readFileSync(approval.planPath));
+    const native = JSON.parse(Buffer.from(outer.nativePlan.bytesBase64, 'base64'));
+    assert.equal(native.release.id, originalPayload.canonicalRelease.id);
+    assert.equal(native.release.tag, originalPayload.canonicalRelease.tag);
+    assert.equal(native.release.targetCommitish, originalPayload.canonicalRelease.targetCommitish);
+    assert.equal(native.release.sourceRevision, originalPayload.sourceRevision);
+    for (const role of ['installer', 'checksum', 'candidate']) {
+      const original = originalPayload.artifacts.find(artifact => artifact.name === native.assets[role].name);
+      assert.equal(native.assets[role].id, original.assetId);
+      assert.equal(native.assets[role].sha256, original.sha256);
+      assert.equal(native.assets[role].url, `https://api.github.com/repos/${catalog.REPOSITORY}/releases/assets/${original.assetId}`);
+    }
+    const start = h.calls.length;
+    assert.equal((await h.helper.runDownload(args(approval), h.environment)).status, 'downloaded');
+    const catalogPayload = JSON.parse(Buffer.from(outer.catalog.bytesBase64, 'base64')).payload;
+    const generation = catalogPayload.schemaVersion === 2 ? catalogPayload.mirror.releaseTag : `v${catalogPayload.version}`;
+    assert.equal(outer.transport.assets.installer,
+      `${catalogPayload.mirror.repositoryURL}/-/releases/download/${generation}/${native.assets.installer.name}`);
+    assert.deepEqual(h.calls.slice(start).filter(call => new URL(call.url).hostname === 'cnb.cool').map(call => call.url),
+      [outer.transport.assets.installer]);
+  }
+  // All three approvals stay pinned to their own exact publication. Only the
+  // newest is executed here; this fixture never executes a real installer.
+  assert.equal((await h.helper.runExecute(args(latestApproval), h.environment)).status, 'installed');
+  const extracted = JSON.parse(fs.readFileSync(path.join(path.dirname(latestApproval.planPath), 'native-install-plan.json')));
+  assert.equal(extracted.release.tag, 'v0.9.9');
+  assert.equal(extracted.release.id, 123);
+  assert.ok(h.calls.some(call => call.url.includes('/download/v0.9.9-policy.11/')));
+  assert.ok(h.calls.some(call => call.url.includes('/download/v0.9.9-policy.12/')));
+  assert.ok(h.calls.every(call => !call.url.includes('github')));
+  assert.equal(h.calls.some(call => /latest\.yml|latest-mac\.yml|policy-refresh-/.test(call.url)), false);
+  assert.equal(h.launches.length, 1);
+});
+
+test('schema 2 cannot reinterpret an old native approval or lower the Windows selection floor', async t => {
+  const h = await harness(t);
+  const schema1 = structuredClone(h.payload);
+  const originalApproval = await h.plan();
+  Object.assign(h.payload, renewCatalogPayload(h.payload));
+  await h.plan();
+  const original = fs.readFileSync(originalApproval.planPath);
+  const retargeted = rewrite(originalApproval, value => {
+    const bytes = h.bytes();
+    value.catalog = { bytesBase64: bytes.toString('base64'), sha256: hash(bytes) };
+  });
+  await assert.rejects(h.helper.runDownload(args(originalApproval), h.environment), error => error.category === 'plan_digest_mismatch');
+  await assert.rejects(h.helper.runDownload(retargeted, h.environment), error => error.category === 'transport_drift');
+  fs.writeFileSync(originalApproval.planPath, original);
+  for (const key of Object.keys(h.payload)) delete h.payload[key];
+  Object.assign(h.payload, schema1);
+  await assert.rejects(h.plan(), error => error.category === 'catalog_rollback');
+  assert.equal((await h.helper.runDownload(args(originalApproval), h.environment)).status, 'downloaded');
 });

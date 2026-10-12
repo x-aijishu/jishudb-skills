@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { runInNewContext } from 'node:vm';
 import test from 'node:test';
+import { renewCatalogPayload } from './fixtures/mirror-catalog-renewal.mjs';
 
 const require = createRequire(import.meta.url);
 const { createMacCnbBridge, normalizedRelease, transportBinding, assertCatalogURL } = require('../skills/jishudb/scripts/install-macos-cnb.cjs');
@@ -147,10 +148,26 @@ test('range transfer preserves timeout bytes and resumes from their exact offset
     }
     return new Response(DATA.subarray(start, end + 1), { status: 206, headers: responseHeaders });
   } });
-  const timer = setTimeout(() => {}, 1000);
-  t.after(() => clearTimeout(timer));
+  const timeout = new AbortController();
+  let deadlines = 0;
+  t.mock.method(AbortSignal, 'timeout', () => ++deadlines === 1 ? timeout.signal : new AbortController().signal);
   const firstPath = path.join(directory, 'first');
   const secondPath = path.join(directory, 'second');
+  // Expire only after the first prefix is written, avoiding scheduler-dependent
+  // failures where a short wall-clock deadline fires before the file opens.
+  const files = require('node:fs/promises');
+  const open = files.open.bind(files);
+  t.mock.method(files, 'open', async (...args) => {
+    const file = await open(...args);
+    if (args[0] === firstPath) {
+      const write = file.writeFile.bind(file);
+      file.writeFile = async (...values) => {
+        await write(...values);
+        timeout.abort(new DOMException('Fixture transfer deadline', 'TimeoutError'));
+      };
+    }
+    return file;
+  });
   const url = plan().assets.installer.url;
   const initial = await bridge.asset(context(), url, firstPath, { offset: 0, end: 9 });
   assert.deepEqual(initial, { httpStatus: '206', bytes: 3, curlCode: 28 });
@@ -225,4 +242,82 @@ test('actual JXA plan contract accepts signed CNB binding and preserves canonica
   approved.transport.source = 'github';
   assert.throws(() => helpers.validatePlan(approved), /transport/);
   assert.equal(approved.expiresAt, originalExpiry);
+});
+
+
+test('schema 2 macOS renewal uses policy transport while preserving canonical application identity', async t => {
+  const original = payload();
+  const renewed = renewCatalogPayload(original);
+  const envelope = signed(renewed);
+  const selected = context(envelope);
+  const approved = plan(selected);
+  const requests = [];
+  const { bridge, directory } = await fixture(t, { fetchImpl: async url => {
+    requests.push(url);
+    assert.doesNotMatch(url, /github/);
+    return url === config.catalogURL ? new Response(JSON.stringify(envelope))
+      : url.endsWith('.dmg') ? new Response(DATA, { status: 206, headers: { 'Content-Range': `bytes 0-${DATA.length - 1}/${DATA.length}` } })
+        : new Response(DATA);
+  } });
+  const discovered = await bridge.discover();
+  assert.equal(discovered.release.id, original.canonicalRelease.id);
+  assert.equal(discovered.release.tag_name, original.canonicalRelease.tag);
+  assert.equal(discovered.release.target_commitish, original.canonicalRelease.targetCommitish);
+  assert.notEqual(discovered.release.id, renewed.policyRelease.id);
+  assert.deepEqual((await bridge.discover(approved)).transport, approved.transport);
+  for (const role of ['installer', 'candidate', 'checksum']) {
+    const asset = approved.assets[role];
+    const canonical = original.artifacts.find(item => item.name === asset.name);
+    assert.equal(asset.id, canonical.assetId);
+    assert.equal(asset.sha256, canonical.sha256);
+    await bridge.asset(discovered, asset.url, path.join(directory, role), role === 'installer' ? { offset: 0, end: DATA.length - 1 } : {});
+  }
+  assert.ok(requests.slice(1).every(url => url.includes('/download/v0.9.9-policy.2/')));
+});
+
+test('actual macOS JXA planner keeps schema 2 policy tags out of native release fields', () => {
+  const source = readFileSync(new URL('../skills/jishudb/scripts/install-macos.zsh', import.meta.url), 'utf8');
+  const embedded = source.match(/<<'JXA'\r?\n([\s\S]*?)\r?\nJXA\r?\n/)[1];
+  class FixtureDate extends Date { constructor(...args) { super(...(args.length ? args : [NOW])); } }
+  const helpers = runInNewContext(`${embedded}\n({selectFromReleases,createPlan,validatePlan});`, {
+    ObjC: { import() {} }, Date: FixtureDate,
+  });
+  const mirror = context(signed(renewCatalogPayload(payload())));
+  const selection = helpers.selectFromReleases([mirror.release], null);
+  selection.transport = mirror.transport;
+  const approved = helpers.createPlan(selection, { revision: 'a'.repeat(40), schemaVersion: 3,
+    distribution: { teamIdentifier: 'ABCDEFGHIJ' }, agentBackgroundLaunch: 1 },
+  ['501', '/Users/test/Applications/JishuDB.app', '/Users/test/Library/Application Support/JishuDB', 'test', '/Users/test/mcp.json', 'jishudb', 'http://127.0.0.1:8088/mcp']);
+  const validated = helpers.validatePlan(approved);
+  assert.equal(validated.release.tag, 'v0.9.9');
+  assert.equal(validated.release.id, 123);
+  assert.equal(validated.transport.catalog.payload.schemaVersion, 2);
+  assert.equal(validated.transport.catalog.payload.mirror.releaseTag, 'v0.9.9-policy.2');
+  assert.equal(validated.expiresAt, mirror.envelope.payload.expiresAt);
+});
+
+
+test('macOS reopens exact old approvals after schema 1 and two schema 2 selections', async t => {
+  let envelope = signed();
+  const requests = [];
+  const { bridge } = await fixture(t, { fetchImpl: async url => {
+    requests.push(url);
+    assert.equal(url, config.catalogURL);
+    return new Response(JSON.stringify(envelope));
+  } });
+  const approvals = [];
+  for (let generation = 1; generation <= 3; generation += 1) {
+    if (generation > 1) envelope = signed(renewCatalogPayload(envelope.payload));
+    approvals.push(plan(await bridge.discover()));
+  }
+  assert.equal(requests.length, 3);
+  for (const [index, approved] of approvals.entries()) {
+    const reopened = await bridge.discover(approved);
+    assert.deepEqual(reopened.transport, approved.transport);
+    assert.equal(reopened.envelope.payload.sequence, index + 1);
+    assert.equal(reopened.release.tag_name, 'v0.9.9');
+    const generation = index === 0 ? 'v0.9.9' : `v0.9.9-policy.${index + 1}`;
+    assert.ok(reopened.envelope.payload.artifacts.every(asset => asset.mirrorURL.includes(`/download/${generation}/`)));
+  }
+  assert.equal(requests.length, 3, 'reopening exact approvals must not fetch mutable latest');
 });
