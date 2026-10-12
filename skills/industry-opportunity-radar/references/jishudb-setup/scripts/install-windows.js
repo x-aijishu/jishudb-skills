@@ -150,12 +150,12 @@ function parseArguments(argv) {
   if (!['check', 'plan', 'download', 'execute'].includes(mode)) {
     fail('invalid_arguments', 'first argument must be check, plan, download, or execute');
   }
-  const allowed = new Set(['-PlanPath', '-PlanSha256', '-Client', '-ConfigTarget', '-ConnectionName']);
+  const allowed = new Set(['-PlanPath', '-PlanSha256', '-Client', '-ConfigTarget', '-ConnectionName', '-ReleaseSource']);
   const allowedByMode = {
     check: new Set(),
-    plan: new Set(['-PlanPath', '-Client', '-ConfigTarget', '-ConnectionName']),
-    download: new Set(['-PlanPath', '-PlanSha256']),
-    execute: new Set(['-PlanPath', '-PlanSha256']),
+    plan: new Set(['-PlanPath', '-Client', '-ConfigTarget', '-ConnectionName', '-ReleaseSource']),
+    download: new Set(['-PlanPath', '-PlanSha256', '-ReleaseSource']),
+    execute: new Set(['-PlanPath', '-PlanSha256', '-ReleaseSource']),
   };
   const values = Object.create(null);
   for (let index = 1; index < argv.length; index += 2) {
@@ -170,12 +170,227 @@ function parseArguments(argv) {
   if (mode === 'check' && argv.length !== 1) fail('invalid_arguments', 'check mode accepts no additional arguments');
   return {
     mode,
+    releaseSource: values['-ReleaseSource'] ?? (['plan', 'check'].includes(mode) ? 'github' : null),
     planPath: values['-PlanPath'] ?? '',
     planSha256: values['-PlanSha256'] ?? '',
     client: values['-Client'] ?? '',
     configTarget: values['-ConfigTarget'] ?? '',
     connectionName: values['-ConnectionName'] ?? 'jishudb',
   };
+}
+
+/** Validate the source selector without letting it override an approved plan. */
+function assertReleaseSourceAvailable(source = 'github') {
+  if (source !== null && !['github', 'cnb'].includes(source)) fail('invalid_release_source', 'release source must be github or cnb');
+  return source;
+}
+
+const MIRROR_PLAN_SCHEMA = 'jishudb-agent-install-envelope-v1';
+const MAXIMUM_CATALOG_BYTES = 1024 * 1024;
+const MAXIMUM_APPROVAL_BYTES = 2 * 1024 * 1024;
+
+/** Load only the trust material shipped with this reviewed Skill package. */
+function loadMirrorSupport() {
+  const requireLocal = process.getBuiltinModule('node:module').createRequire(path.resolve(process.argv[1]));
+  try {
+    return { catalog: requireLocal('./release-mirror-catalog.cjs'), trust: requireLocal('./release-mirror-trust.json') };
+  } catch (error) {
+    throw new InstallError('release_source_not_configured', 'CNB catalog verification resources are unavailable; update the complete Skill package', { cause: error });
+  }
+}
+
+function mirrorFailure(error) {
+  if (error instanceof InstallError) throw error;
+  throw new InstallError(error.code ?? 'catalog_invalid', error.message ?? 'CNB catalog validation failed', { cause: error });
+}
+
+function decodeBoundBytes(value, maximum, label) {
+  requireExactProperties(value, ['bytesBase64', 'sha256'], label);
+  requirePattern(value.sha256, SHA256_PATTERN, `${label} digest`);
+  if (typeof value.bytesBase64 !== 'string' || value.bytesBase64.length > Math.ceil(maximum / 3) * 4) fail('invalid_plan', `${label} bytes exceed their limit`);
+  const bytes = Buffer.from(value.bytesBase64, 'base64');
+  if (!bytes.length || bytes.length > maximum || bytes.toString('base64') !== value.bytesBase64) fail('invalid_plan', `${label} bytes are not canonical base64`);
+  if (sha256Bytes(bytes) !== value.sha256) fail('plan_digest_mismatch', `${label} bytes differ from the approved digest`);
+  return bytes;
+}
+
+function bindBytes(bytes) {
+  return { bytesBase64: bytes.toString('base64'), sha256: sha256Bytes(bytes) };
+}
+
+function mirrorFloorRoot(context) {
+  return path.join(context.localAppData, 'JishuDBAgentInstall');
+}
+
+function readMirrorFloor(context) {
+  const root = mirrorFloorRoot(context);
+  if (!fs.existsSync(root)) return null;
+  assertRegularPath(root, 'directory', 'invalid_catalog_state');
+  assertPrivateAcl(root, true, context.identity, context.tools);
+  const filename = path.join(root, 'release-floor.json');
+  if (!fs.existsSync(filename)) return null;
+  const floor = readDownloadJson(filename, context);
+  requireExactProperties(floor, ['sequence', 'version', 'payloadSha256'], 'catalog floor');
+  requireSafeInteger(floor.sequence, 'catalog sequence', { positive: true });
+  requirePattern(floor.version, SEMVER_PATTERN, 'catalog floor version');
+  requirePattern(floor.payloadSha256, SHA256_PATTERN, 'catalog floor digest');
+  return floor;
+}
+
+function verifyMirrorCatalog(bytes, context, { approved = false } = {}) {
+  const { catalog, trust } = loadMirrorSupport();
+  let envelope;
+  try { envelope = JSON.parse(bytes.toString('utf8')); }
+  catch (error) { throw new InstallError('catalog_invalid', 'CNB catalog is not valid JSON', { cause: error }); }
+  // An existing exact approval remains valid until its original expiry even
+  // when another transaction has subsequently selected a newer catalog.
+  const floor = approved ? null : readMirrorFloor(context);
+  const minimumSequence = Math.max(trust.minimumSequence ?? 0, floor?.sequence ?? 0);
+  const minimumVersion = floor && compareVersion(floor.version, trust.minimumVersion ?? '0.0.0') > 0 ? floor.version : trust.minimumVersion ?? '0.0.0';
+  try {
+    const verified = catalog.verifyCatalog(bytes, {
+      authority: trust.authority,
+      minimumSequence,
+      minimumVersion,
+      acceptedPayloadSha256: floor?.sequence === envelope?.payload?.sequence ? floor.payloadSha256 : null,
+    });
+    return { kind: 'cnb', catalogBytes: bytes, verified, catalog };
+  } catch (error) { mirrorFailure(error); }
+}
+
+function advanceMirrorFloor(source, context) {
+  const root = mirrorFloorRoot(context);
+  if (!fs.existsSync(root)) createPrivateDirectory(root, context.identity, context.tools);
+  assertRegularPath(root, 'directory', 'invalid_catalog_state');
+  assertPrivateAcl(root, true, context.identity, context.tools);
+  const unlock = acquireDownloadLock(root, context);
+  try {
+    // Reverify under the lock so concurrent selections cannot lower the floor.
+    const fresh = verifyMirrorCatalog(source.catalogBytes, context);
+    writeDownloadJson(path.join(root, 'release-floor.json'), {
+      sequence: fresh.verified.payload.sequence,
+      version: fresh.verified.payload.version,
+      payloadSha256: fresh.verified.payloadSha256,
+    }, context);
+  } finally { unlock(); }
+}
+
+function mirrorSelection(source) {
+  const { payload } = source.verified;
+  const assets = {};
+  for (const role of ['installer', 'checksum', 'candidate']) {
+    let artifact;
+    try { artifact = source.catalog.selectArtifact(source.verified, { platform: 'win32', architecture: 'x64', kind: role }); }
+    catch (error) { mirrorFailure(error); }
+    assets[role] = {
+      id: artifact.assetId, name: artifact.name, size: artifact.size,
+      state: 'uploaded', digest: `sha256:${artifact.sha256}`,
+      url: `${API_ORIGIN}/repos/${RELEASE_REPOSITORY}/releases/assets/${artifact.assetId}`,
+      mirrorURL: artifact.mirrorURL,
+    };
+  }
+  const release = { id: payload.canonicalRelease.id, tag_name: payload.canonicalRelease.tag,
+    target_commitish: payload.canonicalRelease.targetCommitish, immutable: true, draft: false, prerelease: false,
+    assets: Object.values(assets) };
+  return { version: payload.version, release, ...assets };
+}
+
+function mirrorTransport(source) {
+  const selected = mirrorSelection(source);
+  return { source: 'cnb', assets: Object.fromEntries(['installer', 'checksum', 'candidate'].map(role => [role, selected[role].mirrorURL])) };
+}
+
+function createMirrorEnvelope(planBytes, source) {
+  return { schema: MIRROR_PLAN_SCHEMA, nativePlan: bindBytes(planBytes), catalog: bindBytes(source.catalogBytes), transport: mirrorTransport(source) };
+}
+
+function unwrapMirrorEnvelope(envelope, context) {
+  requireExactProperties(envelope, ['schema', 'nativePlan', 'catalog', 'transport'], 'mirror envelope');
+  if (envelope.schema !== MIRROR_PLAN_SCHEMA) fail('invalid_plan', 'unsupported mirror envelope schema');
+  const nativeBytes = decodeBoundBytes(envelope.nativePlan, MAXIMUM_PLAN_BYTES, 'native plan');
+  const catalogBytes = decodeBoundBytes(envelope.catalog, MAXIMUM_CATALOG_BYTES, 'catalog');
+  const source = verifyMirrorCatalog(catalogBytes, context, { approved: true });
+  requireExactProperties(envelope.transport, ['source', 'assets'], 'transport');
+  requireExactProperties(envelope.transport.assets, ['installer', 'checksum', 'candidate'], 'transport assets');
+  const expected = mirrorTransport(source);
+  if (envelope.transport.source !== expected.source || Object.keys(expected.assets).some(role => envelope.transport.assets[role] !== expected.assets[role])) fail('transport_drift', 'approved transport differs from the authenticated catalog');
+  let plan;
+  try { plan = JSON.parse(nativeBytes.toString('utf8')); }
+  catch (error) { throw new InstallError('invalid_plan', 'native plan JSON is invalid', { cause: error }); }
+  validatePlan(plan, context);
+  validateMirrorPlanBinding(plan, source);
+  return { plan, source, nativeBytes, nativeSha256: envelope.nativePlan.sha256 };
+}
+
+function validateMirrorPlanBinding(plan, source) {
+  const selected = mirrorSelection(source);
+  validateReleaseMatchesPlan(selected.release, plan);
+  if (plan.release.sourceRevision !== source.verified.payload.sourceRevision || plan.release.version !== source.verified.payload.version) fail('release_drift', 'native plan source revision differs from the authenticated catalog');
+  if (Date.parse(plan.expiresAt) > Date.parse(source.verified.payload.expiresAt)) fail('expired_plan', 'approval outlives the authenticated catalog');
+}
+
+async function discoverMirror(context) {
+  const { trust } = loadMirrorSupport();
+  if (!trust.catalogURL) fail('release_source_not_configured', 'CNB catalog discovery URL is not configured in this Skill package');
+  let url;
+  try { url = new URL(trust.catalogURL); }
+  catch { fail('release_source_not_configured', 'packaged CNB catalog URL is invalid'); }
+  if (url.protocol !== 'https:' || url.username || url.password || url.port || url.hash || url.hostname !== 'cnb.cool') fail('blocked_origin', 'catalog URL is outside the packaged CNB origin');
+  let response;
+  // AI-generated: bootstrap redirects come only from the packaged trust file,
+  // never from unsigned catalog content or a caller-provided host override.
+  for (let hop = 0; hop <= 3; hop += 1) {
+    try { response = await fetchWithTimeout(url, {}, API_TIMEOUT_MILLISECONDS); }
+    catch (error) { throw new InstallError('catalog_network_failed', 'CNB catalog request failed; inspect the network diagnostic', { cause: error }); }
+    if (![301, 302, 303, 307, 308].includes(response.status)) break;
+    await response.body?.cancel().catch(() => {});
+    let next;
+    try { next = new URL(response.headers.get('location') ?? '', url); }
+    catch { fail('blocked_origin', 'catalog redirect URL is invalid'); }
+    if (hop === 3 || !response.headers.get('location') || next.protocol !== 'https:' || next.username || next.password || next.port || next.hash || next.search
+        || !(trust.bootstrapRedirectAllowlist ?? []).some(rule => next.origin === rule.origin && next.pathname.startsWith(rule.pathPrefix))) {
+      fail('blocked_origin', 'catalog redirect is outside the packaged bootstrap policy');
+    }
+    url = next;
+  }
+  if (response.status !== 200) {
+    await response.body?.cancel().catch(() => {});
+    fail([401, 403].includes(response.status) ? 'catalog_authentication_failed' : 'catalog_fetch_failed', `CNB catalog returned HTTP ${response.status}; anonymous direct access is required`);
+  }
+  let bytes;
+  try { bytes = await readBoundedBody(response, MAXIMUM_CATALOG_BYTES, 'catalog_invalid', 'CNB catalog exceeds the size limit'); }
+  catch (error) {
+    if (error instanceof InstallError) throw error;
+    throw new InstallError('catalog_transfer_interrupted', 'CNB catalog transfer was interrupted; inspect the network diagnostic', { cause: error });
+  }
+  const source = verifyMirrorCatalog(bytes, context);
+  return { source, selected: mirrorSelection(source) };
+}
+
+function sourceAssetURL(source, asset) {
+  if (source?.kind !== 'cnb') return asset.url;
+  const selected = mirrorSelection(source);
+  const found = ['installer', 'checksum', 'candidate'].map(role => selected[role]).find(item => item.id === asset.id);
+  if (!found || found.url !== asset.url || found.name !== asset.name || found.size !== asset.size) fail('transport_drift', 'asset does not belong to the authenticated catalog');
+  return found.mirrorURL;
+}
+
+function allowedSourceRedirect(source, initial, target) {
+  if (source?.kind !== 'cnb') return isAllowedAssetRedirect(initial, target);
+  if (!Object.values(mirrorTransport(source).assets).includes(initial.href)) return false;
+  try { source.catalog.assertDownloadURL(target.href, source.verified); return true; }
+  catch { return false; }
+}
+
+async function assertSourceMatchesPlan(plan, source, context) {
+  if (source?.kind !== 'cnb') return assertReleaseMatchesPlan(plan);
+  const verified = verifyMirrorCatalog(source.catalogBytes, context, { approved: true });
+  validateMirrorPlanBinding(plan, verified);
+  return mirrorSelection(verified).release;
+}
+
+function assertRequestedSource(args, source) {
+  if (args.releaseSource != null && args.releaseSource !== (source?.kind ?? 'github')) fail('release_source_mismatch', 'source option differs from the approved plan; use the approved source without overriding it');
 }
 
 function assertWindowsX64() {
@@ -410,12 +625,12 @@ function sha256Bytes(value) {
 }
 
 function assertFileDigest(target, expected, label) {
-  if (sha256File(target) !== expected) fail('digest_mismatch', `${label} SHA-256 does not match the GitHub API digest`);
+  if (sha256File(target) !== expected) fail('digest_mismatch', `${label} SHA-256 does not match the approved digest`);
 }
 
 function assertFileSize(target, expected, label) {
   const stat = assertRegularPath(target, 'file', 'asset_size_mismatch');
-  if (stat.size !== expected) fail('asset_size_mismatch', `${label} size does not match the GitHub API`);
+  if (stat.size !== expected) fail('asset_size_mismatch', `${label} size does not match the approved artifact`);
 }
 
 async function readBoundedBody(response, maximumBytes, category, message) {
@@ -582,22 +797,31 @@ async function saveAsset(
   destination,
   maximumBytes = MAXIMUM_ASSET_BYTES,
   timeoutMilliseconds = SMALL_ASSET_TIMEOUT_MILLISECONDS,
+  sourceInfo = null,
 ) {
-  const source = assertApiDestination(url);
-  let response = await fetchWithTimeout(source, {
-    headers: {
+  const source = sourceInfo?.kind === 'cnb' ? new URL(url) : assertApiDestination(url);
+  if (sourceInfo?.kind === 'cnb' && !Object.values(mirrorTransport(sourceInfo).assets).includes(source.href)) fail('blocked_origin', 'asset URL differs from the authenticated catalog');
+  const fetchAsset = async (target, options) => {
+    try { return await fetchWithTimeout(target, options, timeoutMilliseconds); }
+    catch (error) {
+      if (!sourceInfo) throw error;
+      throw new InstallError('asset_network_failed', 'CNB metadata request failed; inspect the network diagnostic', { cause: error });
+    }
+  };
+  let response = await fetchAsset(source, {
+    headers: sourceInfo?.kind === 'cnb' ? {} : {
       Accept: 'application/octet-stream',
       'User-Agent': 'jishudb-agent-install/0.2',
       'X-GitHub-Api-Version': API_VERSION,
     },
-  }, timeoutMilliseconds);
+  });
   if (response.status === 302) {
     const location = response.headers.get('location');
     if (!location) fail('invalid_asset_redirect', 'asset redirect has no Location');
     const target = new URL(location, source);
-    if (!isAllowedAssetRedirect(source, target)) fail('invalid_asset_redirect', 'asset redirect is outside the reviewed GitHub release host');
+    if (!allowedSourceRedirect(sourceInfo, source, target)) fail('invalid_asset_redirect', 'asset redirect is outside the approved transport policy');
     if (response.body) await response.body.cancel().catch(() => {});
-    response = await fetchWithTimeout(target, {}, timeoutMilliseconds);
+    response = await fetchAsset(target, {});
   }
   if (response.status !== 200) {
     if (response.body) await response.body.cancel().catch(() => {});
@@ -620,6 +844,9 @@ async function saveAsset(
       while (offset < chunk.length) offset += fs.writeSync(descriptor, chunk, offset, chunk.length - offset);
     }
     fs.fsyncSync(descriptor);
+  } catch (error) {
+    if (!sourceInfo || error instanceof InstallError || (error.code && /^(EACCES|EPERM|ENOSPC|EIO|ENOENT|EEXIST|EBUSY)$/.test(error.code))) throw error;
+    throw new InstallError('asset_transfer_interrupted', 'CNB metadata transfer was interrupted; inspect the network diagnostic', { cause: error });
   } finally {
     fs.closeSync(descriptor);
   }
@@ -784,6 +1011,7 @@ async function runCheck(context) {
 }
 
 async function runPlan(args, context) {
+  assertReleaseSourceAvailable(args.releaseSource);
   assertWindowsX64();
   if (!args.client.trim() || !args.configTarget.trim()) fail('invalid_arguments', 'Client and ConfigTarget are required in plan mode');
   requireSafeText(args.client.trim(), 'Client', 512);
@@ -804,11 +1032,11 @@ async function runPlan(args, context) {
   let planReady = false;
   try {
     createPrivateDirectory(evidenceRoot, context.identity, context.tools);
-    const selected = await selectEligibleRelease();
+    const { selected, source } = args.releaseSource === 'cnb' ? await discoverMirror(context) : { selected: await selectEligibleRelease(), source: null };
     const candidatePath = path.join(evidenceRoot, 'candidate.json');
     const checksumPath = path.join(evidenceRoot, 'checksum.txt');
-    await saveAsset(selected.candidate.url, candidatePath, MAXIMUM_JSON_BYTES, SMALL_ASSET_TIMEOUT_MILLISECONDS);
-    await saveAsset(selected.checksum.url, checksumPath, MAXIMUM_CHECKSUM_BYTES, SMALL_ASSET_TIMEOUT_MILLISECONDS);
+    await saveAsset(sourceAssetURL(source, selected.candidate), candidatePath, MAXIMUM_JSON_BYTES, SMALL_ASSET_TIMEOUT_MILLISECONDS, source);
+    await saveAsset(sourceAssetURL(source, selected.checksum), checksumPath, MAXIMUM_CHECKSUM_BYTES, SMALL_ASSET_TIMEOUT_MILLISECONDS, source);
     assertFileSize(candidatePath, selected.candidate.size, 'candidate');
     assertFileSize(checksumPath, selected.checksum.size, 'checksum');
     assertFileDigest(candidatePath, getApiDigest(selected.candidate, 'candidate'), 'candidate');
@@ -853,7 +1081,7 @@ async function runPlan(args, context) {
       schema: candidate.agentBackgroundLaunch === 1 ? BACKGROUND_PLAN_SCHEMA : PLAN_SCHEMA,
       ...(candidate.agentBackgroundLaunch === 1 ? {launchMode: 'agent-background'} : {}),
       createdAt: now.toISOString(),
-      expiresAt: new Date(now.getTime() + PLAN_TTL_MILLISECONDS).toISOString(),
+      expiresAt: new Date(Math.min(now.getTime() + PLAN_TTL_MILLISECONDS, source ? Date.parse(source.verified.payload.expiresAt) : Infinity)).toISOString(),
       operation: 'fresh-install',
       platform: 'windows-x64',
       userSid: context.identity.sid,
@@ -893,9 +1121,13 @@ async function runPlan(args, context) {
     };
     const planBytes = Buffer.from(`${JSON.stringify(plan, null, 2)}\n`, 'utf8');
     if (planBytes.length > MAXIMUM_PLAN_BYTES) fail('invalid_plan', 'plan exceeds the supported size');
-    const digest = sha256Bytes(planBytes);
-    writePrivateFileExclusive(targetPlanPath, planBytes, context.identity, context.tools);
-    await assertReleaseMatchesPlan(plan);
+    await assertSourceMatchesPlan(plan, source, context);
+    validatePlan(plan, context);
+    const approvalBytes = source ? Buffer.from(`${JSON.stringify(createMirrorEnvelope(planBytes, source), null, 2)}\n`) : planBytes;
+    if (approvalBytes.length > MAXIMUM_APPROVAL_BYTES) fail('invalid_plan', 'approval envelope exceeds the size limit');
+    const digest = sha256Bytes(approvalBytes);
+    writePrivateFileExclusive(targetPlanPath, approvalBytes, context.identity, context.tools);
+    if (source) advanceMirrorFloor(source, context);
     if (sha256File(targetPlanPath) !== digest) fail('plan_drift', 'plan changed before approval');
     planReady = true;
     return {
@@ -903,6 +1135,8 @@ async function runPlan(args, context) {
       planPath: targetPlanPath,
       planSha256: digest,
       approval: {
+        releaseSource: source?.kind ?? 'github',
+        ...(source ? { catalogSha256: sha256Bytes(source.catalogBytes), nativePlanSha256: sha256Bytes(planBytes), transport: mirrorTransport(source) } : {}),
         version: plan.release.version,
         expiresAt: plan.expiresAt,
         releaseId: plan.release.id,
@@ -1031,7 +1265,7 @@ function loadApprovedPlan(args, context) {
   assertRegularPath(transactionRoot, 'directory');
   assertPrivateAcl(transactionRoot, true, context.identity, context.tools);
   const planStat = assertRegularPath(resolvedPlan, 'file');
-  if (planStat.size <= 0 || planStat.size > MAXIMUM_PLAN_BYTES) fail('invalid_plan', 'plan size is invalid');
+  if (planStat.size <= 0 || planStat.size > MAXIMUM_APPROVAL_BYTES) fail('invalid_plan', 'plan size is invalid');
   assertPrivateAcl(resolvedPlan, false, context.identity, context.tools);
   const planBytes = fs.readFileSync(resolvedPlan);
   if (planBytes.length !== planStat.size || sha256Bytes(planBytes) !== args.planSha256) {
@@ -1043,8 +1277,14 @@ function loadApprovedPlan(args, context) {
   } catch {
     fail('invalid_plan', 'plan JSON is invalid');
   }
-  validatePlan(plan, context);
-  return { plan, resolvedPlan, transactionRoot };
+  let decoded = { plan, source: null, nativeSha256: args.planSha256 };
+  if (plan?.schema === MIRROR_PLAN_SCHEMA) decoded = unwrapMirrorEnvelope(plan, context);
+  else {
+    if (planBytes.length > MAXIMUM_PLAN_BYTES) fail('invalid_plan', 'native plan exceeds the size limit');
+    validatePlan(plan, context);
+  }
+  assertRequestedSource(args, decoded.source);
+  return { ...decoded, resolvedPlan, transactionRoot, approvalSha256: args.planSha256 };
 }
 
 // AI-generated: resumable bytes remain plan-bound and cannot authorize installation.
@@ -1154,7 +1394,8 @@ async function requestDownload(url, options) {
 
 /** Download one range without installing, launching, or changing client configuration. */
 async function runDownload(args, context) {
-  const { plan, transactionRoot } = loadApprovedPlan(args, context);
+  assertReleaseSourceAvailable(args.releaseSource);
+  const { plan, transactionRoot, source: sourceInfo, approvalSha256 } = loadApprovedPlan(args, context);
   const unlock = acquireDownloadLock(transactionRoot, context);
   let offset = 0;
   try {
@@ -1162,12 +1403,14 @@ async function runDownload(args, context) {
     offset = fs.existsSync(installerPath) ? assertDownloadFile(installerPath, context).size : 0;
     if (offset > plan.assets.installer.size) fail('invalid_download_cache', 'partial installer exceeds the approved size');
     const snapshotPath = path.join(transactionRoot, 'download-release.json');
+    if (sourceInfo && offset > 0 && !fs.existsSync(snapshotPath)) fail('invalid_download_cache', 'partial mirror cache has no approval binding');
     if (fs.existsSync(snapshotPath)) {
-      validateReleaseMatchesPlan(readDownloadJson(snapshotPath, context), plan);
+      const snapshot = readDownloadJson(snapshotPath, context);
+      if (sourceInfo && (snapshot.approvalSha256 !== approvalSha256 || snapshot.catalogSha256 !== sha256Bytes(sourceInfo.catalogBytes))) fail('invalid_download_cache', 'cached release belongs to another approval');
+      validateReleaseMatchesPlan(snapshot, plan);
     } else {
-      const release = await invokeApiJson(`${API_ORIGIN}/repos/${RELEASE_REPOSITORY}/releases/${plan.release.id}`);
-      validateReleaseMatchesPlan(release, plan);
-      writeDownloadJson(snapshotPath, release, context);
+      const release = await assertSourceMatchesPlan(plan, sourceInfo, context);
+      writeDownloadJson(snapshotPath, sourceInfo ? { ...release, approvalSha256, catalogSha256: sha256Bytes(sourceInfo.catalogBytes) } : release, context);
     }
     const urlPath = path.join(transactionRoot, 'download-url.json');
     const progress = (bytesThisStep) => ({ status: offset === plan.assets.installer.size ? 'downloaded' : 'download_pending',
@@ -1178,7 +1421,7 @@ async function runDownload(args, context) {
       if (fs.existsSync(urlPath)) { assertDownloadFile(urlPath, context); fs.unlinkSync(urlPath); }
       return progress(0);
     }
-    const source = new URL(plan.assets.installer.url);
+    const source = new URL(sourceAssetURL(sourceInfo, plan.assets.installer));
     let target = source;
     let cached = false;
     if (fs.existsSync(urlPath)) {
@@ -1188,7 +1431,8 @@ async function runDownload(args, context) {
       catch { fail('invalid_download_cache', 'cached download URL is invalid'); }
       const created = Date.parse(record.createdAt);
       if (record.assetId !== plan.assets.installer.id || !Number.isFinite(created)
-          || !isAllowedAssetRedirect(source, cachedUrl)) fail('invalid_download_cache', 'cached download URL is not bound to the approved asset');
+          || !allowedSourceRedirect(sourceInfo, source, cachedUrl)
+          || (sourceInfo && record.approvalSha256 !== approvalSha256)) fail('invalid_download_cache', 'cached download URL is not bound to the approved asset');
       if (created <= Date.now() && Date.now() - created < DOWNLOAD_URL_TTL_MILLISECONDS) {
         target = cachedUrl; cached = true;
       } else { fs.unlinkSync(urlPath); }
@@ -1196,14 +1440,14 @@ async function runDownload(args, context) {
     const end = Math.min(offset + DOWNLOAD_CHUNK_BYTES, plan.assets.installer.size) - 1;
     const signal = AbortSignal.timeout(DOWNLOAD_TIMEOUT_MILLISECONDS);
     const headers = { Range: `bytes=${offset}-${end}`, 'Accept-Encoding': 'identity' };
-    let response = await requestDownload(target, { redirect: 'manual', signal, headers: cached ? headers : {
+    let response = await requestDownload(target, { redirect: 'manual', signal, headers: cached || sourceInfo ? headers : {
       ...headers, Accept: 'application/octet-stream', 'User-Agent': 'jishudb-agent-install/0.3', 'X-GitHub-Api-Version': API_VERSION,
     } });
     if (!cached && response.status === 302) {
       const redirect = new URL(response.headers.get('location') ?? '', source);
-      if (!isAllowedAssetRedirect(source, redirect)) { await response.body?.cancel(); fail('invalid_asset_redirect', 'download redirect is outside the reviewed GitHub release host'); }
+      if (!allowedSourceRedirect(sourceInfo, source, redirect)) { await response.body?.cancel(); fail('invalid_asset_redirect', 'download redirect is outside the approved transport policy'); }
       await response.body?.cancel();
-      writeDownloadJson(urlPath, { assetId: plan.assets.installer.id, url: redirect.href, createdAt: new Date().toISOString() }, context);
+      writeDownloadJson(urlPath, { assetId: plan.assets.installer.id, url: redirect.href, createdAt: new Date().toISOString(), ...(sourceInfo ? { approvalSha256 } : {}) }, context);
       response = await requestDownload(redirect, { redirect: 'manual', signal, headers });
     }
     const delay = rateLimitDelay(response);
@@ -1214,6 +1458,10 @@ async function runDownload(args, context) {
     }
     if (response.status !== 206) { await response.body?.cancel(); fail('asset_download_failed', `installer range request returned HTTP ${response.status}`); }
     const bytes = await readDownloadRange(response, offset, end, plan.assets.installer.size, signal);
+    if (sourceInfo) {
+      validatePlan(plan, context);
+      await assertSourceMatchesPlan(plan, sourceInfo, context);
+    }
     // Recheck the current cache before appending a validated prefix; final SHA remains mandatory.
     if (!fs.existsSync(installerPath)) writePrivateFileExclusive(installerPath, Buffer.alloc(0), context.identity, context.tools);
     if (assertDownloadFile(installerPath, context).size !== offset) fail('invalid_download_cache', 'download cache changed during the request');
@@ -1240,7 +1488,9 @@ async function runDownload(args, context) {
 }
 
 async function runExecute(args, context) {
-  const { plan, resolvedPlan, transactionRoot } = loadApprovedPlan(args, context);
+  assertReleaseSourceAvailable(args.releaseSource);
+  const loaded = loadApprovedPlan(args, context);
+  const { plan, resolvedPlan, transactionRoot, source, nativeBytes, nativeSha256 } = loaded;
   const mcpPort = Number(new URL(plan.connection.url).port);
   if (!await isTcpPortAvailable(mcpPort)) fail('endpoint_conflict', 'the approved Desktop MCP port is no longer available; create a new plan');
   for (const target of [plan.installation.applicationRoot, plan.installation.dataRoot]) {
@@ -1256,13 +1506,13 @@ async function runExecute(args, context) {
     assertDownloadFile(installerPath, context);
     assertFileSize(installerPath, plan.assets.installer.size, 'installer');
     assertFileDigest(installerPath, plan.assets.installer.sha256, 'installer');
-    await assertReleaseMatchesPlan(plan);
+    await assertSourceMatchesPlan(plan, source, context);
     for (const [asset, destination, maximumBytes, timeoutMilliseconds] of [
       [plan.assets.candidate, candidatePath, MAXIMUM_JSON_BYTES, SMALL_ASSET_TIMEOUT_MILLISECONDS],
       [plan.assets.checksum, checksumPath, MAXIMUM_CHECKSUM_BYTES, SMALL_ASSET_TIMEOUT_MILLISECONDS],
     ]) {
       if (fs.existsSync(destination)) assertDownloadFile(destination, context);
-      else await saveAsset(asset.url, destination, maximumBytes, timeoutMilliseconds);
+      else await saveAsset(sourceAssetURL(source, asset), destination, maximumBytes, timeoutMilliseconds, source);
       assertFileSize(destination, asset.size, asset.role);
       assertFileDigest(destination, asset.sha256, asset.role);
     }
@@ -1285,13 +1535,26 @@ async function runExecute(args, context) {
     validateWindowsCandidate(candidate, selected);
     if ((candidate.agentBackgroundLaunch === 1) !== (plan.schema === BACKGROUND_PLAN_SCHEMA)) fail('invalid_candidate', 'Agent launch capability no longer matches the approved plan');
     if (candidate.revision !== plan.release.sourceRevision) fail('invalid_candidate', 'candidate source revision does not match the approved plan');
-    await assertReleaseMatchesPlan(plan);
+    await assertSourceMatchesPlan(plan, source, context);
 
     validatePlan(plan, context);
+    let nativePlanPath = resolvedPlan;
+    if (source) {
+      // AI-generated: exact embedded bytes and their already-approved digest are
+      // passed to the legacy parser; never authorize a newly serialized child.
+      nativePlanPath = path.join(transactionRoot, 'native-install-plan.json');
+      if (nativePlanPath === resolvedPlan) fail('invalid_plan', 'outer approval cannot occupy the native child path');
+      if (fs.existsSync(nativePlanPath)) {
+        assertDownloadFile(nativePlanPath, context);
+        assertFileDigest(nativePlanPath, nativeSha256, 'native plan');
+      } else writePrivateFileExclusive(nativePlanPath, nativeBytes, context.identity, context.tools);
+      const reloaded = loadApprovedPlan(args, context);
+      if (reloaded.nativeSha256 !== nativeSha256) fail('plan_digest_mismatch', 'native plan binding changed before installation');
+    }
     const installer = childProcess.spawnSync(installerPath, [
       '/S',
-      `/JISHUDB_AGENT_PLAN=${resolvedPlan}`,
-      `/JISHUDB_AGENT_PLAN_SHA256=${args.planSha256}`,
+      `/JISHUDB_AGENT_PLAN=${nativePlanPath}`,
+      `/JISHUDB_AGENT_PLAN_SHA256=${nativeSha256 ?? args.planSha256}`,
     ], {
       env: sanitizedChildEnvironment(),
       stdio: 'ignore',
@@ -1407,6 +1670,7 @@ function runWithDownloadProxy(argv, runtime = process, spawnSync = childProcess.
 async function main(argv = process.argv.slice(2)) {
   try {
     const args = parseArguments(argv);
+    assertReleaseSourceAvailable(args.releaseSource);
     assertWindowsX64();
     const proxyStatus = runWithDownloadProxy(argv);
     if (proxyStatus !== null) return proxyStatus;
@@ -1441,6 +1705,15 @@ async function main(argv = process.argv.slice(2)) {
 
 const exported = {
   InstallError,
+  runPlan,
+  loadApprovedPlan,
+  createMirrorEnvelope,
+  unwrapMirrorEnvelope,
+  verifyMirrorCatalog,
+  discoverMirror,
+  mirrorSelection,
+  advanceMirrorFloor,
+  assertReleaseSourceAvailable,
   downloadProxyEnvironment,
   runWithDownloadProxy,
   fetchWithTimeout,

@@ -13,10 +13,14 @@ PACKAGER = REPOSITORY_ROOT / "scripts" / "package-jishudb-skillhub.py"
 SKILL_ROOT = REPOSITORY_ROOT / "skills" / "jishudb"
 EXPECTED_FILES = [
     "jishudb/SKILL.md",
+    "jishudb/references/cnb-macos-installation.md",
     "jishudb/references/connection-recovery.md",
     "jishudb/references/installation-contract.md",
+    "jishudb/scripts/install-macos-cnb.cjs",
     "jishudb/scripts/install-macos.sh",
     "jishudb/scripts/install-windows.js",
+    "jishudb/scripts/release-mirror-catalog.cjs",
+    "jishudb/scripts/release-mirror-trust.json",
 ]
 
 

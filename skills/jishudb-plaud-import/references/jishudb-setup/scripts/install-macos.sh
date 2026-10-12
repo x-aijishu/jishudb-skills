@@ -17,6 +17,7 @@ readonly MAX_RELEASE_PAGES=5
 readonly DOWNLOAD_SLICE_SECONDS=20
 readonly DOWNLOAD_SLICE_BYTES=16777216
 readonly DOWNLOAD_LOCATION_TTL_SECONDS=300
+readonly SCRIPT_ROOT="${0:A:h}"
 
 MODE="${1:-}"
 [[ "$MODE" == "plan" || "$MODE" == "download" || "$MODE" == "execute" ]] || {
@@ -29,6 +30,11 @@ CURRENT_STAGE="$MODE"
 TRANSACTION_LOCK=""
 PLAN_PATH=""
 PLAN_SHA256=""
+RELEASE_SOURCE="github"
+RELEASE_SOURCE_SPECIFIED=0
+CNB_NODE=""
+CNB_CONTEXT=""
+CNB_RESULT=""
 CANDIDATE_TAG=""
 CANDIDATE_REVISION=""
 CLIENT=""
@@ -55,6 +61,12 @@ trap cleanup EXIT
 
 while (( $# > 0 )); do
   case "$1" in
+    --release-source)
+      (( $# >= 2 && RELEASE_SOURCE_SPECIFIED == 0 )) || { print -u2 -- "--release-source requires exactly one value"; exit 2; }
+      RELEASE_SOURCE="$2"
+      RELEASE_SOURCE_SPECIFIED=1
+      shift 2
+      ;;
     --plan)
       (( $# >= 2 )) || { print -u2 -- "--plan requires a value"; exit 2; }
       PLAN_PATH="$2"
@@ -400,8 +412,10 @@ function assetPlan(asset, role) {
 
 function createPlan(selected, candidate, argv) {
   const now = new Date();
-  const expires = new Date(now.getTime() + 120 * 60 * 1000);
+  const expires = new Date(Math.min(now.getTime() + 120 * 60 * 1000,
+    selected.transport ? Date.parse(selected.transport.catalog.payload.expiresAt) : Infinity));
   return {
+    ...(selected.transport ? {transport: selected.transport} : {}),
     schema: selected.release.prerelease === true ? 'jishudb-agent-install-plan-v3' : candidate.agentBackgroundLaunch === 1 ? 'jishudb-agent-install-plan-v2' : 'jishudb-agent-install-plan-v1',
     ...(selected.release.prerelease === true ? {releaseChannel: 'candidate'} : {}),
     ...(candidate.agentBackgroundLaunch === 1 ? {launchMode: 'agent-background'} : {}),
@@ -447,12 +461,27 @@ function validatePlan(plan) {
     'release', 'assets', 'installation', 'connection', 'publisher',
     ...(['jishudb-agent-install-plan-v2', 'jishudb-agent-install-plan-v3'].includes(plan.schema) ? ['launchMode'] : []),
     ...(rehearsal ? ['releaseChannel'] : []),
+    ...(plan.transport ? ['transport'] : []),
   ], 'plan');
+  if (plan.transport) {
+    exactKeys(plan.transport, ['source', 'catalogURL', 'payloadSha256', 'sequence', 'keyId', 'catalog'], 'plan.transport');
+    if (plan.transport.source !== 'cnb' || rehearsal || !Number.isSafeInteger(plan.transport.sequence)
+        || plan.transport.sequence < 1 || !/^https:\/\/cnb\.cool\//.test(plan.transport.catalogURL)
+        || !/^[0-9a-f]{64}$/.test(plan.transport.payloadSha256)
+        || !/^ed25519-sha256:[0-9a-f]{64}$/.test(plan.transport.keyId)) {
+      throw new Error('plan CNB transport binding is invalid');
+    }
+    exactKeys(plan.transport.catalog, ['payload', 'signature'], 'plan.transport.catalog');
+    if (Date.parse(plan.expiresAt) > Date.parse(plan.transport.catalog.payload.expiresAt)) {
+      throw new Error('plan outlives its signed CNB catalog');
+    }
+  }
   exactKeys(plan.release, ['repository', 'id', 'tag', 'version', 'targetCommitish', 'sourceRepository', 'sourceRevision'], 'plan.release');
   exactKeys(plan.assets, ['installer', 'checksum', 'candidate'], 'plan.assets');
   exactKeys(plan.installation, ['applicationPath', 'dataRoot', 'dataOwnershipAcknowledged'], 'plan.installation');
   exactKeys(plan.connection, ['client', 'configTarget', 'name', 'url', 'profile'], 'plan.connection');
   const signed = plan.publisher && plan.publisher.identity === 'developer-id';
+  if (plan.transport && !signed) throw new Error('CNB requires a signed Developer ID release');
   exactKeys(plan.publisher, signed ? ['identity', 'gatekeeper', 'teamIdentifier'] : ['identity', 'gatekeeper'], 'plan.publisher');
   if (signed) requireString(plan.publisher.teamIdentifier, /^[A-Z0-9]{10}$/, 'plan publisher team');
   ['installer', 'checksum', 'candidate'].forEach((role) => {
@@ -532,6 +561,19 @@ function valueAtPath(value, path) {
 
 function run(argv) {
   const command = argv.shift();
+  if (command === 'json-value') return String(valueAtPath(JSON.parse(argv[0]), argv[1]));
+  if (command === 'plan-source') return readJSON(argv[0]).transport ? 'cnb' : 'github';
+  if (command === 'cnb-plan-expired') {
+    const plan = readJSON(argv[0]);
+    return String(Boolean(plan.transport && Number.isFinite(Date.parse(plan.expiresAt)) && Date.now() >= Date.parse(plan.expiresAt)));
+  }
+  if (command === 'select-cnb') {
+    const context = readJSON(argv[0]);
+    const selected = selectFromReleases([context.release], null);
+    selected.candidateRevision = context.envelope.payload.sourceRevision;
+    selected.transport = context.transport;
+    return JSON.stringify(selected);
+  }
   if (command === 'download-slice') {
     return String(validateDownloadSlice(readText(argv[0]), argv[1], ...argv.slice(2).map(Number)));
   }
@@ -666,6 +708,9 @@ function run(argv) {
           profile: plan.connection.profile,
           launchMode: plan.launchMode || 'foreground',
           publisher: plan.publisher,
+          releaseSource: plan.transport ? 'cnb' : 'github',
+          ...(plan.transport ? {catalogSha256: plan.transport.payloadSha256,
+            catalogExpiresAt: plan.transport.catalog.payload.expiresAt} : {}),
           coveredMutations: ['download', 'per-user install', 'Desktop launch', 'non-secret client entry'],
           userPresence: ['OS installation prompts', 'browser agreement and OAuth consent or existing-account login', 'owner verification where required', 'client trust'],
         },
@@ -678,6 +723,39 @@ function run(argv) {
   throw new Error('unsupported helper command');
 }
 JXA
+}
+
+# CNB alone requires Node for Ed25519 verification; ordinary GitHub installs
+# retain the existing zsh/JXA dependency contract.
+cnb_bridge() {
+  local output category message
+  if ! output=$("$CNB_NODE" "${SCRIPT_ROOT}/install-macos-cnb.cjs" "$@"); then
+    category=$(jxa json-value "$output" errorCategory 2>/dev/null) || category="cnb_transport_failed"
+    message=$(jxa json-value "$output" message 2>/dev/null) || message="CNB transport helper failed"
+    fail "$category" "$message"
+  fi
+  CNB_RESULT="$output"
+}
+
+cnb_prepare_context() {
+  local root
+  root=$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/JishuDBCnbCatalog.XXXXXX")
+  CLEANUP_PATHS+=("$root")
+  CNB_CONTEXT="${root}/catalog.json"
+  if [[ "$MODE" == plan ]]; then
+    cnb_bridge discover "$CNB_CONTEXT"
+  else
+    cnb_bridge refresh "$CNB_CONTEXT" "$PLAN_PATH"
+  fi
+}
+
+# Recheck the original authorization after slow transport/OS checks, without
+# renewing its lifetime or trying to acquire the transaction lock a second time.
+cnb_revalidate_approval() {
+  [[ "$RELEASE_SOURCE" == cnb ]] || return 0
+  [[ "$(file_sha256 "$PLAN_PATH")" == "$PLAN_SHA256" ]] || fail "plan_digest_mismatch" "approved plan changed during the transaction"
+  jxa validate-plan "$PLAN_PATH" "$(/usr/bin/id -u)" >/dev/null || fail "plan_expired" "approved plan expired during the transaction"
+  cnb_bridge verify-plan "$PLAN_PATH"
 }
 
 rate_limit_seconds() {
@@ -697,6 +775,10 @@ rate_limit_seconds() {
 
 api_get() {
   local url="$1" destination="$2" http_status retry_seconds=0
+  if [[ "$RELEASE_SOURCE" == cnb ]]; then
+    cnb_bridge release "$CNB_CONTEXT" "$url" "$destination"
+    return
+  fi
   local headers="${destination}.response-headers"
   assert_private_cache_file "$headers"
   CLEANUP_PATHS+=("$headers")
@@ -731,6 +813,11 @@ api_get() {
 asset_download() {
   local url="$1"
   local destination="$2"
+  if [[ "$RELEASE_SOURCE" == cnb ]]; then
+    /bin/rm -f -- "$destination"
+    cnb_bridge asset "$CNB_CONTEXT" "$url" "$destination"
+    return
+  fi
   local headers="${destination}.headers"
   local first="${destination}.first"
   local http_status location
@@ -766,7 +853,7 @@ file_sha256() {
 
 assert_digest() {
   local path="$1" expected="$2" label="$3"
-  [[ "$(file_sha256 "$path")" == "$expected" ]] || fail "digest_mismatch" "${label} SHA-256 does not match the GitHub API digest"
+  [[ "$(file_sha256 "$path")" == "$expected" ]] || fail "digest_mismatch" "${label} SHA-256 does not match the approved release digest"
 }
 
 assert_size() {
@@ -855,7 +942,11 @@ run_plan() {
   evidence_root=$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/JishuDBAgentEvidence.XXXXXX")
   CLEANUP_PATHS+=("$evidence_root")
   selected_path="${evidence_root}/selected.json"
-  if [[ -n "$CANDIDATE_TAG" || -n "$CANDIDATE_REVISION" ]]; then
+  if [[ "$RELEASE_SOURCE" == cnb ]]; then
+    [[ -z "$CANDIDATE_TAG" && -z "$CANDIDATE_REVISION" ]] || fail "invalid_arguments" "CNB catalogs support only approved stable releases"
+    cnb_prepare_context
+    jxa select-cnb "$CNB_CONTEXT" > "$selected_path" || fail "catalog_invalid" "CNB catalog has no eligible signed macOS release"
+  elif [[ -n "$CANDIDATE_TAG" || -n "$CANDIDATE_REVISION" ]]; then
     jxa candidate-request "$CANDIDATE_TAG" "$CANDIDATE_REVISION" >/dev/null || fail "invalid_arguments" "candidate testing requires an exact tag and full source revision"
     page_path="${evidence_root}/candidate-release.json"
     api_get "${API_ORIGIN}/repos/${RELEASE_REPOSITORY}/releases/tags/${CANDIDATE_TAG}" "$page_path"
@@ -916,6 +1007,7 @@ run_plan() {
   digest=$(file_sha256 "$PLAN_PATH")
   jxa result plan "$PLAN_PATH" "$digest"
   CLEANUP_PATHS=("$evidence_root")
+  [[ -z "$CNB_CONTEXT" ]] || CLEANUP_PATHS+=("${CNB_CONTEXT:h}")
 }
 
 validate_approved_plan() {
@@ -927,7 +1019,15 @@ validate_approved_plan() {
   [[ "$(/usr/bin/stat -f '%u' "$PLAN_PATH")" == "$(/usr/bin/id -u)" ]] || fail "invalid_plan" "plan is not owned by the current user"
   [[ "$(/usr/bin/stat -f '%Lp' "$PLAN_PATH")" == "600" ]] || fail "invalid_plan" "plan permissions must be 0600"
   [[ "$(file_sha256 "$PLAN_PATH")" == "$PLAN_SHA256" ]] || fail "plan_digest_mismatch" "plan SHA-256 does not match the approved digest"
+  [[ "$(jxa cnb-plan-expired "$PLAN_PATH")" != true ]] || fail "plan_expired" "CNB approval expired; retained bytes do not renew approval"
   jxa validate-plan "$PLAN_PATH" "$(/usr/bin/id -u)" >/dev/null || fail "invalid_plan" "plan is expired or outside the reviewed contract"
+  local approved_source
+  approved_source=$(jxa plan-source "$PLAN_PATH") || fail "invalid_plan" "plan source cannot be read"
+  if (( RELEASE_SOURCE_SPECIFIED == 1 )) && [[ "$RELEASE_SOURCE" != "$approved_source" ]]; then
+    fail "release_source_mismatch" "release source differs from the unchanged approved plan"
+  fi
+  RELEASE_SOURCE="$approved_source"
+  assert_release_source_available
 
   local transaction_root="${PLAN_PATH:h}"
   [[ -d "$transaction_root" && ! -L "$transaction_root" &&
@@ -936,6 +1036,7 @@ validate_approved_plan() {
   /bin/mkdir -m 700 -- "${transaction_root}/transfer.lock" 2>/dev/null ||
     fail "transaction_busy" "another operation or interrupted host owns this plan; inspect it before continuing"
   TRANSACTION_LOCK="${transaction_root}/transfer.lock"
+  [[ "$RELEASE_SOURCE" != cnb ]] || cnb_prepare_context
 }
 
 # AI-generated file boundary: reject foreign files and links before using cached
@@ -975,6 +1076,7 @@ run_download() {
   if [[ -f "$installer_path" ]]; then
     assert_size "$installer_path" "$expected_size" installer
     assert_digest "$installer_path" "$expected_sha" installer
+    cnb_revalidate_approval
     assert_private_cache_file "${root}/download-location.txt"
     /bin/rm -f -- "$partial_path" "${root}/download-location.txt"
     jxa result download "$PLAN_PATH" "$PLAN_SHA256" "$expected_size" 0
@@ -998,74 +1100,82 @@ run_download() {
     local location_cache="${root}/download-location.txt" cache_age using_cached_location=0
     assert_private_cache_file "$location_cache"
     http_status=""
-    if [[ -f "$location_cache" ]]; then
-      cache_age=$(( $(/bin/date +%s) - $(/usr/bin/stat -f '%m' "$location_cache") ))
-      if (( cache_age >= 0 && cache_age < DOWNLOAD_LOCATION_TTL_SECONDS )); then
-        (( $(/usr/bin/stat -f '%z' "$location_cache") <= 8192 )) || fail "invalid_asset_redirect" "cached redirect exceeds the length limit"
-        location=$(<"$location_cache")
-        using_cached_location=1
-        jxa redirect "$url" "$location" >/dev/null || fail "invalid_asset_redirect" "cached redirect is outside the reviewed GitHub host"
-        http_status="302"
-      else
-        /bin/rm -- "$location_cache"
+    if [[ "$RELEASE_SOURCE" == cnb ]]; then
+      cnb_bridge slice "$CNB_CONTEXT" "$url" "$chunk" "$headers" "$offset" "$end"
+      /usr/bin/printf '%s\n' "$CNB_RESULT" > "${slice_root}/result.json"
+      http_status=$(jxa value "${slice_root}/result.json" httpStatus)
+      curl_code=$(jxa value "${slice_root}/result.json" curlCode)
+    else
+      if [[ -f "$location_cache" ]]; then
+        cache_age=$(( $(/bin/date +%s) - $(/usr/bin/stat -f '%m' "$location_cache") ))
+        if (( cache_age >= 0 && cache_age < DOWNLOAD_LOCATION_TTL_SECONDS )); then
+          (( $(/usr/bin/stat -f '%z' "$location_cache") <= 8192 )) || fail "invalid_asset_redirect" "cached redirect exceeds the length limit"
+          location=$(<"$location_cache")
+          using_cached_location=1
+          jxa redirect "$url" "$location" >/dev/null || fail "invalid_asset_redirect" "cached redirect is outside the reviewed GitHub host"
+          http_status="302"
+        else
+          /bin/rm -- "$location_cache"
+        fi
       fi
-    fi
-    if [[ -z "$http_status" ]]; then
-      # Fetch a fresh signed redirect only when needed, rather than exhausting
-      # anonymous GitHub API quota on every range. Never print the signed URL.
-      http_status=$(/usr/bin/curl --silent --show-error --proto '=https' --tlsv1.2 \
-        --connect-timeout 10 --max-time "$DOWNLOAD_SLICE_SECONDS" --max-redirs 0 \
-        --max-filesize "$DOWNLOAD_SLICE_BYTES" --range "${offset}-${end}" \
-        --header 'Accept: application/octet-stream' --header "X-GitHub-Api-Version: ${API_VERSION}" \
-        --header 'User-Agent: jishudb-agent-install/0.1' \
-        --dump-header "$headers" --output "$first" --write-out '%{http_code}' "$url") || curl_code=$?
-      if [[ "$http_status" == "403" || "$http_status" == "429" ]]; then
-        local retry_seconds
-        retry_seconds=$(rate_limit_seconds "$headers")
-        if (( retry_seconds > 0 )); then
-          jxa result waiting "$PLAN_PATH" "$PLAN_SHA256" "$offset" "$retry_seconds"
-          return
+      if [[ -z "$http_status" ]]; then
+        # Fetch a fresh signed redirect only when needed, rather than exhausting
+        # anonymous GitHub API quota on every range. Never print the signed URL.
+        http_status=$(/usr/bin/curl --silent --show-error --proto '=https' --tlsv1.2 \
+          --connect-timeout 10 --max-time "$DOWNLOAD_SLICE_SECONDS" --max-redirs 0 \
+          --max-filesize "$DOWNLOAD_SLICE_BYTES" --range "${offset}-${end}" \
+          --header 'Accept: application/octet-stream' --header "X-GitHub-Api-Version: ${API_VERSION}" \
+          --header 'User-Agent: jishudb-agent-install/0.1' \
+          --dump-header "$headers" --output "$first" --write-out '%{http_code}' "$url") || curl_code=$?
+        if [[ "$http_status" == "403" || "$http_status" == "429" ]]; then
+          local retry_seconds
+          retry_seconds=$(rate_limit_seconds "$headers")
+          if (( retry_seconds > 0 )); then
+            jxa result waiting "$PLAN_PATH" "$PLAN_SHA256" "$offset" "$retry_seconds"
+            return
+          fi
+        fi
+        if [[ "$http_status" == "302" && "$curl_code" == 0 ]]; then
+          location=$(/usr/bin/awk 'tolower($1)=="location:" {sub(/^[^:]*:[[:space:]]*/, ""); sub(/\r$/, ""); print; exit}' "$headers")
+          jxa redirect "$url" "$location" >/dev/null || fail "invalid_asset_redirect" "asset redirect is outside the reviewed GitHub host"
+          /usr/bin/printf '%s' "$location" > "${slice_root}/location"
+          /bin/mv -- "${slice_root}/location" "$location_cache"
         fi
       fi
       if [[ "$http_status" == "302" && "$curl_code" == 0 ]]; then
-        location=$(/usr/bin/awk 'tolower($1)=="location:" {sub(/^[^:]*:[[:space:]]*/, ""); sub(/\r$/, ""); print; exit}' "$headers")
-        jxa redirect "$url" "$location" >/dev/null || fail "invalid_asset_redirect" "asset redirect is outside the reviewed GitHub host"
-        /usr/bin/printf '%s' "$location" > "${slice_root}/location"
-        /bin/mv -- "${slice_root}/location" "$location_cache"
+        http_status=$(/usr/bin/curl --silent --show-error --proto '=https' --tlsv1.2 \
+          --connect-timeout 10 --max-time "$DOWNLOAD_SLICE_SECONDS" --max-redirs 0 \
+          --max-filesize "$DOWNLOAD_SLICE_BYTES" --range "${offset}-${end}" \
+          --header 'User-Agent:' --dump-header "$headers" \
+          --output "$chunk" --write-out '%{http_code}' "$location") || curl_code=$?
+      elif [[ "$http_status" == "206" ]]; then
+        /bin/mv -- "$first" "$chunk"
+      else
+        fail "asset_download_failed" "GitHub asset request failed (curl ${curl_code}, HTTP ${http_status}); cached bytes were not advanced"
       fi
-    fi
-    if [[ "$http_status" == "302" && "$curl_code" == 0 ]]; then
-      http_status=$(/usr/bin/curl --silent --show-error --proto '=https' --tlsv1.2 \
-        --connect-timeout 10 --max-time "$DOWNLOAD_SLICE_SECONDS" --max-redirs 0 \
-        --max-filesize "$DOWNLOAD_SLICE_BYTES" --range "${offset}-${end}" \
-        --header 'User-Agent:' --dump-header "$headers" \
-        --output "$chunk" --write-out '%{http_code}' "$location") || curl_code=$?
-    elif [[ "$http_status" == "206" ]]; then
-      /bin/mv -- "$first" "$chunk"
-    else
-      fail "asset_download_failed" "GitHub asset request failed (curl ${curl_code}, HTTP ${http_status}); cached bytes were not advanced"
-    fi
-    if [[ "$http_status" == "403" || "$http_status" == "429" ]]; then
-      local cdn_retry_seconds
-      cdn_retry_seconds=$(rate_limit_seconds "$headers")
-      if (( cdn_retry_seconds > 0 )); then
-        jxa result waiting "$PLAN_PATH" "$PLAN_SHA256" "$offset" "$cdn_retry_seconds"
-        return
+      if [[ "$http_status" == "403" || "$http_status" == "429" ]]; then
+        local cdn_retry_seconds
+        cdn_retry_seconds=$(rate_limit_seconds "$headers")
+        if (( cdn_retry_seconds > 0 )); then
+          jxa result waiting "$PLAN_PATH" "$PLAN_SHA256" "$offset" "$cdn_retry_seconds"
+          return
+        fi
+        /bin/rm -f -- "$location_cache"
+        if [[ "$http_status" == "403" && "$using_cached_location" == 1 ]]; then
+          # Refresh an expired cached URL once. A newly issued URL failing the
+          # same way is terminal, not an unbounded authorization retry loop.
+          jxa result waiting "$PLAN_PATH" "$PLAN_SHA256" "$offset" 1 download_url_refresh_required
+          return
+        fi
       fi
-      /bin/rm -f -- "$location_cache"
-      if [[ "$http_status" == "403" && "$using_cached_location" == 1 ]]; then
-        # Refresh an expired cached URL once. A newly issued URL failing the
-        # same way is terminal, not an unbounded authorization retry loop.
-        jxa result waiting "$PLAN_PATH" "$PLAN_SHA256" "$offset" 1 download_url_refresh_required
-        return
-      fi
+      [[ "$http_status" == "206" ]] || fail "asset_download_failed" "GitHub CDN request failed (curl ${curl_code}, HTTP ${http_status}); cached bytes were not advanced"
     fi
-    [[ "$http_status" == "206" ]] || fail "asset_download_failed" "GitHub CDN request failed (curl ${curl_code}, HTTP ${http_status}); cached bytes were not advanced"
     [[ -f "$chunk" ]] || fail "asset_download_failed" "download produced no data (curl ${curl_code}, HTTP ${http_status})"
     received=$(/usr/bin/stat -f '%z' "$chunk")
     jxa download-slice "$headers" "$http_status" "$offset" "$end" "$expected_size" "$received" "$curl_code" >/dev/null ||
       fail "invalid_download_slice" "download range was not valid (curl ${curl_code}, HTTP ${http_status}); cached bytes were not advanced"
     (( received > 0 )) || fail "download_stalled" "download made no progress within the bounded step"
+    cnb_revalidate_approval
     /bin/cat -- "$chunk" >> "$partial_path"
     added="$received"
     offset=$(/usr/bin/stat -f '%z' "$partial_path")
@@ -1073,6 +1183,7 @@ run_download() {
   if (( offset == expected_size )); then
     CURRENT_STAGE="verification"
     assert_digest "$partial_path" "$expected_sha" installer
+    cnb_revalidate_approval
     /bin/mv -- "$partial_path" "$installer_path"
     /bin/rm -f -- "${root}/download-location.txt"
   fi
@@ -1157,12 +1268,14 @@ run_execute() {
   jxa manifest "$manifest_path" "$version" "$revision" >/dev/null || fail "installer_content_invalid" "release manifest does not match the plan"
 
   CURRENT_STAGE="install"
+  cnb_revalidate_approval
   /bin/mkdir -p -m 700 -- "${HOME}/Applications"
   /bin/mkdir -m 700 -- "$staging_root"
   /usr/bin/ditto --rsrc --extattr "${mount_point}/JishuDB.app" "${staging_root}/JishuDB.app" || fail "installer_copy_failed" "validated application bundle could not be staged"
   validate_bundle_symlinks "${staging_root}/JishuDB.app" "staged application bundle"
   [[ -z "$signed_team" ]] || verify_signed_artifact "${staging_root}/JishuDB.app" "$signed_team" app
   [[ ! -e "$app_path" ]] || fail "existing_installation" "application destination appeared during staging"
+  cnb_revalidate_approval
   /bin/mv -- "${staging_root}/JishuDB.app" "$app_path"
   /usr/bin/hdiutil detach "$mount_point" >/dev/null || fail "installer_cleanup_failed" "DMG could not be detached"
   CLEANUP_MOUNT=""
@@ -1172,6 +1285,7 @@ run_execute() {
   [[ -f "${app_path}/Contents/Resources/runtime/jishudb" && ! -L "${app_path}/Contents/Resources/runtime/jishudb" ]] || fail "installed_receipt_invalid" "installed runtime receipt is invalid"
   jxa manifest "${app_path}/Contents/Resources/runtime/RELEASE-MANIFEST.json" "$version" "$revision" >/dev/null || fail "installed_receipt_invalid" "installed release manifest does not match the plan"
   CURRENT_STAGE="launch"
+  cnb_revalidate_approval
   write_endpoint_config "$data_root" "$mcp_url"
   if [[ "$(jxa plan-value "$PLAN_PATH" 'schema')" != "jishudb-agent-install-plan-v1" ]]; then
     /usr/bin/open -g "$app_path" --args --jishudb-agent-background || fail "desktop_launch_failed" "installed Desktop could not be launched in background"
@@ -1180,6 +1294,27 @@ run_execute() {
   fi
   jxa result installed "$version" "$app_path" "$data_root" "$mcp_url"
 }
+
+# AI-generated: block unavailable sources before any discovery, cache access,
+# or installation. A CNB request must never become an implicit GitHub request.
+assert_release_source_available() {
+  case "$RELEASE_SOURCE" in
+    github) ;;
+    cnb)
+      CNB_NODE=$(command -v node) || fail "node_runtime_required" "CNB installation requires Node.js 22 or newer"
+      "$CNB_NODE" -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 22 ? 0 : 1)' ||
+        fail "node_runtime_required" "CNB installation requires Node.js 22 or newer"
+      [[ -f "${SCRIPT_ROOT}/install-macos-cnb.cjs" && -f "${SCRIPT_ROOT}/release-mirror-catalog.cjs" &&
+         -f "${SCRIPT_ROOT}/release-mirror-trust.json" ]] ||
+        fail "release_source_not_configured" "CNB verifier and independently approved trust must be bundled with this installer"
+      ;;
+    *)
+      fail "invalid_release_source" "release source must be github or cnb"
+      ;;
+  esac
+}
+
+assert_release_source_available
 
 if [[ "$MODE" == "plan" ]]; then
   run_plan

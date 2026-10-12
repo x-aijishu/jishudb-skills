@@ -10,10 +10,14 @@ const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 const skillRoot = path.join(repositoryRoot, 'skills', 'jishudb');
 const expectedFiles = [
   'SKILL.md',
+  'references/cnb-macos-installation.md',
   'references/connection-recovery.md',
   'references/installation-contract.md',
+  'scripts/install-macos-cnb.cjs',
   'scripts/install-macos.zsh',
   'scripts/install-windows.js',
+  'scripts/release-mirror-catalog.cjs',
+  'scripts/release-mirror-trust.json',
 ];
 
 function fail(message) {

@@ -19,6 +19,79 @@ Changing any fixed trust input requires a reviewed Skill version. Never accept
 a runtime override for a different repository, API origin, asset host, bundle
 ID, or endpoint-selection boundary.
 
+## Explicit release source
+
+The default source for a new Windows plan is `github`. `plan -ReleaseSource cnb`
+selects the packaged CNB catalog discovery URL and independently embedded
+Ed25519 authority in `scripts/release-mirror-trust.json`. The catalog verifier is
+`scripts/release-mirror-catalog.cjs`. All three files must travel together with
+the installer helper. No publication token or private key belongs in a Skill.
+There is no source fallback, environment-variable source override, or runtime
+trust-key/host override. Unknown values fail as `invalid_release_source`.
+
+In Windows `download` and `execute`, omission of `-ReleaseSource` uses the
+approved plan's source. An explicit selector must match that source, otherwise
+`release_source_mismatch` stops the transaction. Windows `check` remains a local
+runtime check without a source option. Catalog publication, full CNB transfer,
+and real installer acceptance are separate gates; source support does not
+establish that a live catalog or an accepted installation exists.
+
+### Windows CNB approval envelope
+
+GitHub plans retain their existing native v1/v2 schema. CNB plans instead use
+`jishudb-agent-install-envelope-v1`, with these exact fields:
+
+- `schema`: the outer envelope schema identifier.
+- `nativePlan`: `{bytesBase64, sha256}`, binding the complete raw native-plan
+  bytes, including creation/expiry, SID, paths, launch mode and canonical GitHub
+  release/asset identity. Those identity URLs are never requested in CNB mode.
+- `catalog`: `{bytesBase64, sha256}`, binding the exact authenticated signed
+  catalog bytes selected during plan creation.
+- `transport`: `{source: "cnb", assets: {installer, checksum, candidate}}`,
+  binding the three exact mirror URLs to their signed catalog entries.
+
+The printed `planSha256` authorizes the outer file's raw bytes. Every download
+and execute reloads that file, compares the approved digest, verifies embedded
+byte digests and catalog signature/freshness, and compares native release/asset
+identity and transport to the authenticated catalog. Candidate and checksum
+bytes are downloaded and independently checked during planning and execution.
+There are no GitHub API, canonical asset or release revalidation requests in
+CNB mode. Failure categories retain signature, freshness, rollback, source,
+range, cache, digest and installer distinctions without automatic fallback.
+
+The catalog bootstrap accepts only the packaged HTTPS discovery URL and bounded
+redirects listed in packaged `bootstrapRedirectAllowlist`. Asset requests start
+at the exact signed versioned URL and allow one redirect under the signed CNB
+policy. User credentials and GitHub API headers are not forwarded to CNB.
+
+New catalog selections enforce the embedded minimum version/sequence and a
+private per-user high-water record at
+`%LOCALAPPDATA%/JishuDBAgentInstall/release-floor.json`. Updates reverify the
+signature and current floor under an exclusive lock. Equal-sequence different
+payloads fail as equivocation. A previously approved exact catalog remains
+usable until its original expiry even if a newer transaction advances the
+selection floor; a mutable latest pointer cannot retarget that approval.
+
+The existing native parser rejects mirror URLs and unknown fields. At execute,
+the helper extracts only the already-approved native raw bytes into the private
+`native-install-plan.json` sibling and passes its previously bound digest to
+NSIS. Existing child bytes must match; the helper never computes a digest for a
+changed child and promotes that new value to authorization. The outer plan is
+reloaded immediately before invoking NSIS. Native SID/path/lifetime admission
+and unsigned-publisher/user-presence requirements remain in force.
+
+The private download snapshot and temporary redirect cache are bound to the
+outer approval digest; the snapshot additionally binds the catalog digest.
+Partial bytes without an approval snapshot cannot be resumed. Full-file size
+and SHA-256 remain mandatory; valid ranges alone do not authenticate partial
+bytes. CNB checks plan/catalog expiry again after each bounded range before
+appending it. Expired approval never renews itself and cannot authorize execute.
+No cross-plan partial-cache reuse is implemented.
+
+macOS source behavior is specified by its packaged helper and platform-specific
+contract. Windows envelope/native-plan semantics must not be passed to macOS.
+
+## Eligible release
 ## Eligible release
 
 Enumerate published releases with the versioned API and a bounded maximum of

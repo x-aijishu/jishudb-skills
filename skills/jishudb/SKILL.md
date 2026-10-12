@@ -114,6 +114,17 @@ Use only the packaged helper for the current platform:
 - macOS arm64: `scripts/install-macos.zsh`
 - Windows x64: `scripts/install-windows.js`
 
+Release discovery defaults to GitHub with no automatic source fallback.
+`-ReleaseSource` (Windows) and `--release-source` (macOS) accept `github` or
+`cnb` in plan/download/execute modes. CNB uses the packaged Ed25519 trust key
+and anonymous signed catalog; macOS CNB mode additionally requires Node.js 22+.
+For download/execute, omit the selector to retain the approved plan's source.
+Do not silently retry with GitHub or treat a prepared mirror inventory as a
+trusted installation source. Preserve catalog/network/signature failures and
+report `BLOCKED` until the exact cause is resolved. See the installation contract
+and [macOS CNB instructions](references/cnb-macos-installation.md). Source support
+does not prove live catalog availability or real-device installation acceptance.
+
 On Windows, run the Node helper's `check` mode as described in the installation
 contract. Continue only when it returns `status=compatible`. The Windows helper
 must not materialize or invoke PowerShell; it uses the packaged JavaScript and

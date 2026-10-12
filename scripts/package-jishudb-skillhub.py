@@ -18,17 +18,25 @@ REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 SKILL_ROOT = REPOSITORY_ROOT / "skills" / "jishudb"
 CANONICAL_FILES = (
     "SKILL.md",
+    "references/cnb-macos-installation.md",
     "references/connection-recovery.md",
     "references/installation-contract.md",
+    "scripts/install-macos-cnb.cjs",
     "scripts/install-macos.zsh",
     "scripts/install-windows.js",
+    "scripts/release-mirror-catalog.cjs",
+    "scripts/release-mirror-trust.json",
 )
 COMPATIBLE_FILES = (
     "SKILL.md",
+    "references/cnb-macos-installation.md",
     "references/connection-recovery.md",
     "references/installation-contract.md",
+    "scripts/install-macos-cnb.cjs",
     "scripts/install-macos.sh",
     "scripts/install-windows.js",
+    "scripts/release-mirror-catalog.cjs",
+    "scripts/release-mirror-trust.json",
 )
 
 
@@ -115,6 +123,11 @@ def build_files() -> dict[str, tuple[bytes, int]]:
     windows = (SKILL_ROOT / "scripts" / "install-windows.js").read_bytes()
     return {
         "SKILL.md": (render_skillhub_skill(skill).encode("utf-8"), 0o644),
+        "references/cnb-macos-installation.md": (
+            (SKILL_ROOT / "references/cnb-macos-installation.md").read_text(encoding="utf-8")
+            .replace("scripts/install-macos.zsh", "scripts/install-macos.sh").encode("utf-8"),
+            0o644,
+        ),
         "references/connection-recovery.md": (
             (SKILL_ROOT / "references" / "connection-recovery.md").read_bytes(), 0o644,
         ),
@@ -122,6 +135,9 @@ def build_files() -> dict[str, tuple[bytes, int]]:
             render_skillhub_contract(contract).encode("utf-8"),
             0o644,
         ),
+        "scripts/install-macos-cnb.cjs": ((SKILL_ROOT / "scripts/install-macos-cnb.cjs").read_bytes(), 0o644),
+        "scripts/release-mirror-catalog.cjs": ((SKILL_ROOT / "scripts/release-mirror-catalog.cjs").read_bytes(), 0o644),
+        "scripts/release-mirror-trust.json": ((SKILL_ROOT / "scripts/release-mirror-trust.json").read_bytes(), 0o644),
         "scripts/install-macos.sh": (macos, 0o755),
         "scripts/install-windows.js": (windows, 0o755),
     }

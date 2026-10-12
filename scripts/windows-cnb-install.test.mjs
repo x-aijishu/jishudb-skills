@@ -1,0 +1,264 @@
+import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import http from 'node:http';
+import { EventEmitter } from 'node:events';
+import { createRequire } from 'node:module';
+import os from 'node:os';
+import path from 'node:path';
+import test from 'node:test';
+import vm from 'node:vm';
+
+const require = createRequire(import.meta.url);
+const catalog = require('../skills/jishudb/scripts/release-mirror-catalog.cjs');
+const helperText = fs.readFileSync(new URL('../skills/jishudb/scripts/install-windows.js', import.meta.url), 'utf8');
+const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
+const keys = crypto.generateKeyPairSync('ed25519');
+const privateKey = keys.privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64');
+const authority = catalog.normalizeAuthority({ algorithm: 'Ed25519', publicKey: keys.publicKey.export({ type: 'spki', format: 'der' }).toString('base64'), keyId: `ed25519-sha256:${hash(keys.publicKey.export({ type: 'spki', format: 'der' }))}` });
+
+function fixture({ installerBytes = Buffer.from('fixture installer, never executed') } = {}) {
+  const version = '0.9.9';
+  const name = `JishuDB-Windows-x64-${version}-Setup.exe`;
+  const revision = 'a'.repeat(40);
+  const candidate = { schemaVersion: 1, product: 'jishudb-desktop', productName: 'JishuDB', bundleIdentifier: 'com.aijishu.jishudb', version, revision,
+    target: 'windows-x64', minimumSystemVersion: '10.0.22621', runtimeLock: { path: 'packaging/windows/desktop-runtime-lock.json', sha256: 'b'.repeat(64) },
+    artifact: { name, sha256: hash(installerBytes), size: installerBytes.length },
+    distribution: { mode: 'per-user-nsis-v1', publisherIdentity: 'none', authenticode: 'not-signed', smartScreenAssessment: 'unknown-publisher-manual-approval-required', installationScope: 'current-user' },
+    authorization: { mode: 'windows-fresh-install-v1', publisherIdentity: 'none' }, publication: { requested: true },
+    source: { repository: 'x-aijishu/jishudb', runId: '123', runAttempt: 1 }, agentBackgroundLaunch: 1 };
+  const contents = new Map([[name, installerBytes], [`${name}.candidate.json`, Buffer.from(JSON.stringify(candidate))], [`${name}.sha256`, Buffer.from(`${hash(installerBytes)}  ${name}\n`)]]);
+  const repo = 'https://cnb.cool/x-aijishu/jishudb-desktop-releases';
+  const payload = { schemaVersion: 1, domain: catalog.DOMAIN, product: 'jishudb-desktop', channel: 'stable', sequence: 10, version, sourceRevision: revision,
+    issuedAt: new Date(Date.now() - 60000).toISOString(), expiresAt: new Date(Date.now() + 3600000).toISOString(),
+    canonicalRelease: { repository: catalog.REPOSITORY, id: 123, tag: `v${version}`, targetCommitish: 'main', url: `https://github.com/${catalog.REPOSITORY}/releases/tag/v${version}` },
+    mirror: { repositoryURL: repo, redirectAllowlist: [{ origin: 'https://asset.cnb.cool', pathPrefix: '/assets/t/' }] },
+    artifacts: catalog.artifactSpecifications(version).map((spec, index) => {
+      const bytes = contents.get(spec.name) ?? Buffer.from(`unused fixture ${spec.name}`);
+      contents.set(spec.name, bytes);
+      return { ...spec, size: bytes.length, sha256: hash(bytes), assetId: index + 1,
+        canonicalURL: `https://github.com/${catalog.REPOSITORY}/releases/download/v${version}/${spec.name}`,
+        mirrorURL: `${repo}/-/releases/download/v${version}/${spec.name}` };
+    }) };
+  const trust = { authority, catalogURL: `${repo}/-/releases/latest/download/jishudb-release-catalog.json`, minimumSequence: 1, minimumVersion: version,
+    bootstrapRedirectAllowlist: [{ origin: 'https://asset.cnb.cool', pathPrefix: '/assets/t/' }] };
+  return { payload, contents, trust, name, bytes: () => Buffer.from(JSON.stringify(catalog.signCatalog(payload, privateKey, authority))) };
+}
+
+async function harness(t, options = {}) {
+  const f = fixture(options);
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'windows-cnb-'));
+  const localAppData = path.join(root, 'local');
+  fs.mkdirSync(localAppData);
+  const calls = [];
+  const requests = [];
+  const launches = [];
+  let handler;
+  const server = http.createServer((req, res) => {
+    requests.push({ url: req.url, headers: req.headers });
+    const requested = new URL(req.url, 'http://fixture');
+    if (handler?.(req, res, requested)) return;
+    if (requested.pathname.endsWith('jishudb-release-catalog.json')) {
+      res.writeHead(302, { Location: 'https://asset.cnb.cool/assets/t/catalog' }); res.end(); return;
+    }
+    if (requested.pathname === '/assets/t/catalog') { res.end(f.bytes()); return; }
+    const name = path.basename(requested.pathname);
+    const bytes = f.contents.get(name);
+    if (!bytes) { res.writeHead(404); res.end(); return; }
+    if (!requested.pathname.startsWith('/assets/t/')) { res.writeHead(302, { Location: `https://asset.cnb.cool/assets/t/${name}` }); res.end(); return; }
+    if (req.headers.range) {
+      const [, first, last] = /^bytes=(\d+)-(\d+)$/.exec(req.headers.range);
+      const start = Number(first), end = Number(last);
+      res.writeHead(206, { 'Content-Range': `bytes ${start}-${end}/${bytes.length}`, 'Content-Length': end - start + 1 });
+      res.end(bytes.subarray(start, end + 1));
+    } else res.end(bytes);
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); fs.rmSync(root, { recursive: true, force: true }); });
+  const portableProcess = Object.create(process);
+  portableProcess.getBuiltinModule = name => {
+    if (name === 'node:os') return { ...os, release: () => '10.0.22621' };
+    if (name === 'node:child_process') return {
+      spawnSync(command, args) {
+        launches.push({ command, args });
+        const childPath = args.find(arg => arg.startsWith('/JISHUDB_AGENT_PLAN=')).slice('/JISHUDB_AGENT_PLAN='.length);
+        const childBytes = fs.readFileSync(childPath);
+        assert.equal(args.at(-1), `/JISHUDB_AGENT_PLAN_SHA256=${hash(childBytes)}`);
+        const child = JSON.parse(childBytes);
+        assert.equal(child.schema, 'jishudb-agent-install-plan-v2');
+        assert.ok(child.assets.installer.url.startsWith('https://api.github.com/'));
+        for (const filename of [path.join(child.installation.applicationRoot, 'JishuDB.exe'), path.join(child.installation.applicationRoot, 'resources/runtime/jishudb.exe'), child.installation.bootstrapPath]) {
+          fs.mkdirSync(path.dirname(filename), { recursive: true }); fs.writeFileSync(filename, 'fixture receipt');
+        }
+        return { status: 0 };
+      },
+      spawn() { const emitter = new EventEmitter(); emitter.unref = () => {}; queueMicrotask(() => emitter.emit('spawn')); return emitter; },
+    };
+    return process.getBuiltinModule(name);
+  };
+  const context = vm.createContext({ AbortSignal, Buffer, URL, console, module: { exports: {} }, process: portableProcess, setTimeout, clearTimeout,
+    fixtureSupport: { catalog, trust: f.trust }, fetch: async (url, init) => {
+      const target = new URL(url);
+      // Fail immediately if any discovery, validation, candidate or range path
+      // tries GitHub. Forward only approved fixture hosts through actual HTTP.
+      assert.ok(['cnb.cool', 'asset.cnb.cool'].includes(target.hostname), `forbidden network destination: ${target.hostname}`);
+      calls.push({ url: target.href, init });
+      return fetch(`http://127.0.0.1:${server.address().port}${target.pathname}${target.search}`, init);
+    } });
+  vm.runInContext(helperText.replace(/^#![^\n]*\n/, ''), context);
+  // Only Windows filesystem/identity admission and native process execution are
+  // substituted. Catalog verification, approval hashes and all source/network,
+  // bounded-range, disk cache and execute orchestration use production code.
+  vm.runInContext(`
+    loadMirrorSupport = () => fixtureSupport;
+    assertWindowsX64 = () => {};
+    assertNoReparseAncestors = target => path.resolve(target);
+    normalizeLocalWindowsPath = target => path.resolve(target);
+    setPrivateAcl = () => {};
+    assertPrivateAcl = () => {};
+    createPrivateDirectory = target => fs.mkdirSync(target);
+    getFreeDesktopMcpUrl = async () => 'http://127.0.0.1:8088/mcp';
+    isTcpPortAvailable = async () => true;
+  `, context);
+  const helper = context.module.exports;
+  const environment = { identity: { sid: 'S-1-5-21-1-2-3-1001' }, localAppData, tempRoot: root, tools: {} };
+  return { ...f, helper, environment, context, root, calls, requests, launches, setHandler: fn => { handler = fn; },
+    plan: () => helper.runPlan({ releaseSource: 'cnb', planPath: '', client: 'WorkBuddy', configTarget: path.join(root, 'client.json'), connectionName: 'jishudb' }, environment) };
+}
+
+function args(approval) { return { planPath: approval.planPath, planSha256: approval.planSha256 }; }
+
+function rewrite(approval, mutate) {
+  const value = JSON.parse(fs.readFileSync(approval.planPath));
+  mutate(value);
+  const bytes = Buffer.from(JSON.stringify(value));
+  fs.writeFileSync(approval.planPath, bytes);
+  return { ...args(approval), planSha256: hash(bytes) };
+}
+
+test('CNB plan, bounded resume and execute use actual HTTP with every GitHub destination forbidden', async t => {
+  const h = await harness(t, { installerBytes: Buffer.alloc(16 * 1024 * 1024 + 23, 71) });
+  const approval = await h.plan();
+  assert.equal(approval.approval.releaseSource, 'cnb');
+  const outer = JSON.parse(fs.readFileSync(approval.planPath));
+  assert.equal(outer.nativePlan.sha256, approval.approval.nativePlanSha256);
+  assert.equal((await h.helper.runDownload(args(approval), h.environment)).status, 'download_pending');
+  assert.equal((await h.helper.runDownload({ ...args(approval), releaseSource: 'cnb' }, h.environment)).status, 'downloaded');
+  // Latest disappearing/advancing cannot retarget or block a still-valid exact
+  // approval. Execution uses its pinned, independently authenticated catalog.
+  h.setHandler((req, res, url) => { if (url.pathname.includes('catalog')) { res.writeHead(404); res.end(); return true; } return false; });
+  assert.equal((await h.helper.runExecute(args(approval), h.environment)).status, 'installed');
+  assert.equal(h.launches.length, 1);
+  assert.deepEqual(fs.readFileSync(path.join(path.dirname(approval.planPath), 'native-install-plan.json')), Buffer.from(outer.nativePlan.bytesBase64, 'base64'));
+  assert.ok(h.requests.some(r => r.headers.range === 'bytes=16777216-16777238'));
+  assert.ok(h.calls.every(call => !call.url.includes('github')));
+  assert.equal(h.calls.filter(call => call.url === h.trust.catalogURL).length, 1);
+  assert.ok(h.calls.every(call => call.init.headers?.['X-GitHub-Api-Version'] === undefined));
+});
+
+test('approved digest, source, embedded native digest and exact mirror mapping cannot drift', async t => {
+  const h = await harness(t);
+  const approval = await h.plan();
+  const original = fs.readFileSync(approval.planPath);
+  await assert.rejects(h.helper.runDownload({ ...args(approval), releaseSource: 'github' }, h.environment), e => e.category === 'release_source_mismatch');
+  const updated = rewrite(approval, value => { value.transport.assets.installer = 'https://cnb.cool/other/file'; });
+  await assert.rejects(h.helper.runDownload(args(approval), h.environment), e => e.category === 'plan_digest_mismatch');
+  await assert.rejects(h.helper.runDownload(updated, h.environment), e => e.category === 'transport_drift');
+  fs.writeFileSync(approval.planPath, original);
+  const changedChild = rewrite(approval, value => { value.nativePlan.bytesBase64 = Buffer.from('{}').toString('base64'); });
+  await assert.rejects(h.helper.runDownload(changedChild, h.environment), e => e.category === 'plan_digest_mismatch');
+  assert.equal(h.launches.length, 0);
+});
+
+test('tampered catalog, unknown key, expired catalog and expired native plan fail before artifact requests', async t => {
+  const h = await harness(t);
+  const approval = await h.plan();
+  const original = fs.readFileSync(approval.planPath);
+  for (const [mutate, expected] of [
+    [signed => { signed.payload.sourceRevision = 'f'.repeat(40); }, 'catalog_signature_invalid'],
+    [signed => { signed.signature.keyId = 'ed25519-sha256:' + '0'.repeat(64); }, 'catalog_signature_invalid'],
+    [signed => { signed.payload.issuedAt = new Date(Date.now() - 120000).toISOString(); signed.payload.expiresAt = new Date(Date.now() - 60000).toISOString(); Object.assign(signed, catalog.signCatalog(signed.payload, privateKey, authority)); }, 'catalog_expired'],
+  ]) {
+    fs.writeFileSync(approval.planPath, original);
+    const rewritten = rewrite(approval, value => { const signed = JSON.parse(Buffer.from(value.catalog.bytesBase64, 'base64')); mutate(signed); const bytes = Buffer.from(JSON.stringify(signed)); value.catalog = { bytesBase64: bytes.toString('base64'), sha256: hash(bytes) }; });
+    await assert.rejects(h.helper.runDownload(rewritten, h.environment), e => e.category === expected);
+  }
+  fs.writeFileSync(approval.planPath, original);
+  const expired = rewrite(approval, value => { const native = JSON.parse(Buffer.from(value.nativePlan.bytesBase64, 'base64')); native.createdAt = new Date(Date.now() - 120000).toISOString(); native.expiresAt = new Date(Date.now() - 60000).toISOString(); const bytes = Buffer.from(JSON.stringify(native)); value.nativePlan = { bytesBase64: bytes.toString('base64'), sha256: hash(bytes) }; });
+  await assert.rejects(h.helper.runDownload(expired, h.environment), e => e.category === 'expired_plan');
+  assert.equal(h.calls.length, 6); // Discovery and two metadata assets, each via one redirect.
+});
+
+test('new selections reject rollback/equivocation while previous exact approvals keep their lifetime', async t => {
+  const h = await harness(t);
+  const original = await h.plan();
+  h.payload.sequence += 1;
+  await h.plan();
+  assert.equal((await h.helper.runDownload(args(original), h.environment)).status, 'downloaded');
+  h.payload.sequence -= 1;
+  await assert.rejects(h.plan(), e => e.category === 'catalog_rollback');
+  h.payload.sequence += 1;
+  h.payload.sourceRevision = 'c'.repeat(40);
+  await assert.rejects(h.plan(), e => e.category === 'catalog_equivocation');
+});
+
+test('unsafe redirects, invalid ranges and corrupt complete cache never launch or fall back', async t => {
+  const h = await harness(t);
+  const approval = await h.plan();
+  h.setHandler((req, res, url) => { if (url.pathname.endsWith(h.name)) { res.writeHead(302, { Location: 'https://evil.invalid/package' }); res.end(); return true; } return false; });
+  await assert.rejects(h.helper.runDownload(args(approval), h.environment), e => e.category === 'invalid_asset_redirect');
+  h.setHandler((req, res) => { if (req.headers.range) { res.end(h.contents.get(h.name)); return true; } return false; });
+  await assert.rejects(h.helper.runDownload(args(approval), h.environment), e => e.category === 'asset_download_failed');
+  h.setHandler(null);
+  assert.equal((await h.helper.runDownload(args(approval), h.environment)).status, 'downloaded');
+  fs.writeFileSync(path.join(path.dirname(approval.planPath), h.name), Buffer.alloc(h.contents.get(h.name).length, 1));
+  await assert.rejects(h.helper.runExecute(args(approval), h.environment), e => e.category === 'digest_mismatch');
+  assert.equal(h.launches.length, 0);
+});
+
+test('catalog discovery rejects anonymous-auth failures and unapproved bootstrap redirects distinctly', async t => {
+  const h = await harness(t);
+  h.setHandler((req, res) => { res.writeHead(401); res.end(); return true; });
+  await assert.rejects(h.plan(), e => e.category === 'catalog_authentication_failed');
+  h.setHandler((req, res) => { res.writeHead(302, { Location: 'https://github.com/catalog.json' }); res.end(); return true; });
+  await assert.rejects(h.plan(), e => e.category === 'blocked_origin');
+  assert.equal(h.calls.length, 2);
+});
+
+
+test('expiry reached during execute metadata work cannot renew approval or launch native installer', async t => {
+  const h = await harness(t);
+  const approval = await h.plan();
+  await h.helper.runDownload(args(approval), h.environment);
+  const original = fs.readFileSync(approval.planPath);
+  // Simulate elapsed time after the final authenticated metadata check; keep
+  // the real plan validator, native extraction and spawn boundaries intact.
+  vm.runInContext(`
+    const originalSourceCheck = assertSourceMatchesPlan;
+    let sourceChecks = 0;
+    assertSourceMatchesPlan = async (...values) => {
+      const result = await originalSourceCheck(...values);
+      if (++sourceChecks === 2) {
+        const Clock = Date;
+        const future = Clock.now() + 31 * 60 * 1000;
+        Date = class extends Clock { constructor(...args) { super(...(args.length ? args : [future])); } static now() { return future; } };
+      }
+      return result;
+    };
+  `, h.context);
+  await assert.rejects(h.helper.runExecute(args(approval), h.environment), error => error.category === 'expired_plan');
+  assert.equal(h.launches.length, 0);
+  assert.deepEqual(fs.readFileSync(approval.planPath), original);
+  assert.equal(fs.existsSync(path.join(path.dirname(approval.planPath), 'native-install-plan.json')), false);
+});
+
+test('production loader uses the packaged authority, never a key carried by the catalog', () => {
+  const runtime = Object.create(process);
+  runtime.argv = [process.execPath, new URL('../skills/jishudb/scripts/install-windows.js', import.meta.url).pathname];
+  const sandbox = vm.createContext({ module: { exports: {} }, process: runtime, Buffer, URL });
+  vm.runInContext(helperText.replace(/^#![^\n]*\n/, ''), sandbox);
+  // The fixture has a valid signature under its own key, but that key is not
+  // the independently approved production key shipped alongside the helper.
+  assert.throws(() => sandbox.module.exports.verifyMirrorCatalog(fixture().bytes(), {}, { approved: true }),
+    error => error.category === 'catalog_signature_invalid');
+});

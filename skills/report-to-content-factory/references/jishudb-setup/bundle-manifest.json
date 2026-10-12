@@ -5,28 +5,48 @@
   "generator": "scripts/bundle-task-setup.py",
   "files": [
     {
+      "path": "references/cnb-macos-installation.md",
+      "sha256": "e1de2dd154d5522f114c7c0aeab9840d5ef06aa22cd9eeb9c8254959825f25da",
+      "mode": "644"
+    },
+    {
       "path": "references/connection-recovery.md",
       "sha256": "a80bc3ca60e608c5bcf1124dc5a7212147ca9ab1ee1887eb7584177fb11ed9b4",
       "mode": "644"
     },
     {
       "path": "references/installation-contract.md",
-      "sha256": "06a78111eb5cb3e72280db94a189618280d4d50eafd00fdcb98952440f5034fb",
+      "sha256": "c2bc856f50f9e7681780febfa63aac34940f340c6ecb19d37a17bb6f1c375540",
+      "mode": "644"
+    },
+    {
+      "path": "scripts/install-macos-cnb.cjs",
+      "sha256": "635bf91ec65f04595fa0aa3d971225da03fbc46361d115f56b472eff4961880f",
       "mode": "644"
     },
     {
       "path": "scripts/install-macos.sh",
-      "sha256": "b89c4eb483f00b6ccfe4230a5235b6f2dbe6a3b299a820e9fe1930a5e3c63e59",
+      "sha256": "a74cec84ce92d16a027f9d84f04002b94561a85953e99e55da055428af1d11cc",
       "mode": "755"
     },
     {
       "path": "scripts/install-windows.js",
-      "sha256": "7f2bfba3998cac66fb621b47036bec89d3afe83dd77261d57bda3e155e20aeec",
+      "sha256": "a986b462bc3f251f9e8dcdc7337b1fad88041b9274b0a1954c90a56ffb9ffcfb",
       "mode": "755"
     },
     {
+      "path": "scripts/release-mirror-catalog.cjs",
+      "sha256": "80521981f46a22c5b85c3f9982f86a0f07f3e26d58582bac6c5ba0f128a81d0c",
+      "mode": "644"
+    },
+    {
+      "path": "scripts/release-mirror-trust.json",
+      "sha256": "a9672efb3f1ea6f1d48eeba174c5e7e444c9103cd141cad67c476c1c83c1a14d",
+      "mode": "644"
+    },
+    {
       "path": "setup.md",
-      "sha256": "ddcdd9a01e974bca520866b2a558b89ee663bd096cec905025f0b8dc9f38f902",
+      "sha256": "95a2a94bb1ea4a906836718802ecf2a24c08a286a01bb1ee1a1de7482774220d",
       "mode": "644"
     },
     {

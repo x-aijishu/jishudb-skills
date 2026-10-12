@@ -33,10 +33,14 @@ test('Skill package is deterministic and binds every reviewed file', (t) => {
   assert.equal(manifest.publicationEligible, !manifest.sourceTreeDirty);
   assert.deepEqual(manifest.files.map((entry) => entry.path), [
     'SKILL.md',
+    'references/cnb-macos-installation.md',
     'references/connection-recovery.md',
   'references/installation-contract.md',
+    'scripts/install-macos-cnb.cjs',
     'scripts/install-macos.zsh',
     'scripts/install-windows.js',
+    'scripts/release-mirror-catalog.cjs',
+    'scripts/release-mirror-trust.json',
   ]);
   assert.equal(
     manifest.artifact.sha256,
