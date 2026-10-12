@@ -15,7 +15,7 @@ compatibility: >-
   the user's local machine.
 metadata:
   author: jishudb
-  version: "0.1.15"
+  version: "0.1.16"
   openclaw:
     homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/jishudb
 ---
@@ -139,7 +139,8 @@ ad hoc commands, select a newer release, retry a failed installer, or reuse the
 approval after drift.
 
 For macOS, first call `download --plan <path> --plan-sha256 <digest>` using
-`scripts/install-macos.zsh`. Each call has a bounded transfer and returns one
+`scripts/install-macos.zsh`. For Windows, call `node scripts/install-windows.js
+download -PlanPath <path> -PlanSha256 <digest>`. Each call has a bounded transfer and returns one
 JSON result. On `download_pending`, report `downloadedBytes` / `totalBytes` and
 call `download` again with the same approved plan. These are successful
 continuations, not failed-installer retries. Use a host timeout of at least
@@ -147,8 +148,8 @@ continuations, not failed-installer retries. Use a host timeout of at least
 On `download_waiting`, preserve the partial file and honor `retryAfterSeconds`
 before another download call; never create a new plan to evade rate limits.
 On `downloaded`, call `execute` with that plan; it rechecks the whole asset and
-installs without downloading the DMG again. Windows retains its documented
-`execute` flow. Do not run `execute` to download a macOS installer.
+installs without downloading the installer again. On both platforms, `execute`
+requires the complete verified download; never use it as a download command.
 
 A failed result includes `stage` and `errorCategory`. Preserve them; an outer
 host kill or timeout alone does not prove OS/sandbox denial or a completed

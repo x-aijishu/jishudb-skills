@@ -14,7 +14,7 @@ compatibility: >-
 metadata:
   author: jishudb
   bundled-setup: jishudb
-  version: "0.1.7"
+  version: "0.1.8"
   openclaw:
     homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/industry-opportunity-radar
 ---

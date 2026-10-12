@@ -110,6 +110,10 @@ node scripts/install-windows.js plan \
   -ConfigTarget <absolute-client-config-path> \
   -ConnectionName jishudb
 
+node scripts/install-windows.js download \
+  -PlanPath <absolute-plan-path> \
+  -PlanSha256 <approved-lowercase-sha256>
+
 node scripts/install-windows.js execute \
   -PlanPath <absolute-plan-path> \
   -PlanSha256 <approved-lowercase-sha256>
@@ -179,6 +183,34 @@ Persist the reviewed endpoint at
 `~/Library/Application Support/JishuDB/desktop-endpoint.json` before launch.
 
 ### Windows x64
+
+After approval, call `download` with the approved plan path and digest in separate
+host invocations (allow at least 120 seconds each). Each call requests at most
+16 MiB with a 20-second transfer deadline. Only an exact HTTP 206 Content-Range,
+identity encoding, and matching declared length permit saving bytes. A bounded
+transfer timeout may preserve its validated prefix; other network failures and
+invalid responses never append bytes. `download_pending` reports progress and
+continues the same plan. `download_waiting` requires honoring retryAfterSeconds.
+A private five-minute CDN URL cache and validated release snapshot avoid repeated
+GitHub API calls; execute re-fetches the immutable release before installation.
+A cached URL rejected with 403 is discarded for one fresh lookup; a fresh URL
+rejected without rate-limit headers is terminal.
+
+The cache is private, restricted to the plan directory, and rejects reparse
+points and hard links. Download and execute share an exclusive lock. If a host
+kills an invocation and leaves `download.lock`, inspect the recorded PID and
+confirm it has exited before manually removing only that lock; do not overlap
+invocations or delete the partial installer. Malformed locks require inspection.
+Existing files from an older interrupted helper can be continued under the same
+unexpired, approved plan only after their paths and private ACLs validate.
+
+Only complete size and SHA-256 produce `downloaded`. Then invoke `execute`, which
+rechecks the complete cache and never starts another full installer download.
+It preserves downloaded files on failure for diagnosis. It revalidates expiry
+immediately before starting NSIS. The Windows plan still expires 30 minutes from
+creation (displayed in the approval envelope); never edit or extend it. Expiry
+requires a new reviewed plan and is not a successful installation. Download
+errors retain their stage/category; a partial file is never installation proof.
 
 Use the per-user NSIS Agent-plan path only. The installer-path helper validates
 the plan schema/digest, current SID, expiry, release, canonical non-reparse

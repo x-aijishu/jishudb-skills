@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 'use strict';
+// AI-generated: reviewed plan, transport, and cache validation guard external installer execution.
 
 const childProcess = process.getBuiltinModule('node:child_process');
 const crypto = process.getBuiltinModule('node:crypto');
@@ -29,8 +30,10 @@ const MAXIMUM_CHECKSUM_BYTES = 1024 * 1024;
 const MAXIMUM_ASSET_BYTES = 1024 * 1024 * 1024;
 const MAXIMUM_PLAN_BYTES = 64 * 1024;
 const API_TIMEOUT_MILLISECONDS = 60 * 1000;
-const SMALL_ASSET_TIMEOUT_MILLISECONDS = 5 * 60 * 1000;
-const HTTP_TIMEOUT_MILLISECONDS = 30 * 60 * 1000;
+const SMALL_ASSET_TIMEOUT_MILLISECONDS = 60 * 1000;
+const DOWNLOAD_CHUNK_BYTES = 16 * 1024 * 1024;
+const DOWNLOAD_TIMEOUT_MILLISECONDS = 20 * 1000;
+const DOWNLOAD_URL_TTL_MILLISECONDS = 5 * 60 * 1000;
 const SEMVER_PATTERN = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const REVISION_PATTERN = /^[0-9a-f]{40}$/;
@@ -70,8 +73,8 @@ const CHILD_ENVIRONMENT_ALLOWLIST = new Set([
 ]);
 
 class InstallError extends Error {
-  constructor(category, message) {
-    super(`${category}: ${message}`);
+  constructor(category, message, options = {}) {
+    super(`${category}: ${message}`, options);
     this.name = 'InstallError';
     this.category = category;
     this.publicMessage = message;
@@ -144,13 +147,14 @@ function isDesktopMcpUrl(value) {
 
 function parseArguments(argv) {
   const mode = argv[0];
-  if (!['check', 'plan', 'execute'].includes(mode)) {
-    fail('invalid_arguments', 'first argument must be check, plan, or execute');
+  if (!['check', 'plan', 'download', 'execute'].includes(mode)) {
+    fail('invalid_arguments', 'first argument must be check, plan, download, or execute');
   }
   const allowed = new Set(['-PlanPath', '-PlanSha256', '-Client', '-ConfigTarget', '-ConnectionName']);
   const allowedByMode = {
     check: new Set(),
     plan: new Set(['-PlanPath', '-Client', '-ConfigTarget', '-ConnectionName']),
+    download: new Set(['-PlanPath', '-PlanSha256']),
     execute: new Set(['-PlanPath', '-PlanSha256']),
   };
   const values = Object.create(null);
@@ -466,7 +470,13 @@ async function invokeApiJson(url) {
     },
   }, API_TIMEOUT_MILLISECONDS);
   if (response.status !== 200) {
+    const delay = rateLimitDelay(response);
     if (response.body) await response.body.cancel().catch(() => {});
+    if (delay !== null) {
+      const error = new InstallError('github_rate_limited', 'GitHub API rate limit requires waiting');
+      error.retryAfterSeconds = delay;
+      throw error;
+    }
     fail('github_api_failed', `GitHub API returned HTTP ${response.status}`);
   }
   const body = await readBoundedBody(response, MAXIMUM_JSON_BYTES, 'github_api_failed', 'GitHub API response exceeds the supported size');
@@ -571,7 +581,7 @@ async function saveAsset(
   url,
   destination,
   maximumBytes = MAXIMUM_ASSET_BYTES,
-  timeoutMilliseconds = HTTP_TIMEOUT_MILLISECONDS,
+  timeoutMilliseconds = SMALL_ASSET_TIMEOUT_MILLISECONDS,
 ) {
   const source = assertApiDestination(url);
   let response = await fetchWithTimeout(source, {
@@ -698,7 +708,12 @@ function assertPlanShape(plan) {
 
 async function assertReleaseMatchesPlan(plan) {
   const release = await invokeApiJson(`${API_ORIGIN}/repos/${RELEASE_REPOSITORY}/releases/${plan.release.id}`);
-  if (!isRecord(release) || release.immutable !== true || release.draft || release.prerelease
+  validateReleaseMatchesPlan(release, plan);
+  return release;
+}
+
+function validateReleaseMatchesPlan(release, plan) {
+  if (!isRecord(release) || release.id !== plan.release.id || release.immutable !== true || release.draft || release.prerelease
       || release.tag_name !== plan.release.tag || String(release.target_commitish) !== plan.release.targetCommitish) {
     fail('release_drift', 'release identity or immutable state changed');
   }
@@ -889,6 +904,7 @@ async function runPlan(args, context) {
       planSha256: digest,
       approval: {
         version: plan.release.version,
+        expiresAt: plan.expiresAt,
         releaseId: plan.release.id,
         installer: plan.assets.installer.name,
         installerSha256: plan.assets.installer.sha256,
@@ -944,6 +960,8 @@ function validatePlan(plan, context) {
     const asset = plan.assets[role];
     requireSafeInteger(asset.id, `plan ${role} ID`, { positive: true });
     requireSafeInteger(asset.size, `plan ${role} size`, { positive: true });
+    const maximum = role === 'installer' ? MAXIMUM_ASSET_BYTES : role === 'candidate' ? MAXIMUM_JSON_BYTES : MAXIMUM_CHECKSUM_BYTES;
+    if (asset.size > maximum) fail('invalid_plan', `plan ${role} exceeds its supported size`);
     requirePattern(asset.sha256, SHA256_PATTERN, `plan ${role} digest`);
     if (asset.role !== role || asset.name !== expectedNames[role]
         || asset.url !== `${API_ORIGIN}/repos/${RELEASE_REPOSITORY}/releases/assets/${asset.id}`) {
@@ -998,9 +1016,9 @@ function writeDesktopEndpointConfig(bootstrapPath, mcpUrl, context) {
   writePrivateFileExclusive(endpointPath, `${JSON.stringify({ localPort: port, schemaVersion: ENDPOINT_CONFIG_SCHEMA }, null, 2)}\n`, context.identity, context.tools);
 }
 
-async function runExecute(args, context) {
+function loadApprovedPlan(args, context) {
   assertWindowsX64();
-  if (!args.planPath.trim() || !args.planSha256.trim()) fail('invalid_arguments', 'PlanPath and PlanSha256 are required in execute mode');
+  if (!args.planPath.trim() || !args.planSha256.trim()) fail('invalid_arguments', 'PlanPath and PlanSha256 are required in download or execute mode');
   requirePattern(args.planSha256, SHA256_PATTERN, 'PlanSha256');
   let resolvedPlan;
   try {
@@ -1026,6 +1044,203 @@ async function runExecute(args, context) {
     fail('invalid_plan', 'plan JSON is invalid');
   }
   validatePlan(plan, context);
+  return { plan, resolvedPlan, transactionRoot };
+}
+
+// AI-generated: resumable bytes remain plan-bound and cannot authorize installation.
+
+/** Validate an exact range before consuming any bytes, including timeout prefixes. */
+function validateRangeResponse(response, start, end, total) {
+  if (response.status !== 206
+      || response.headers.get('content-range') !== `bytes ${start}-${end}/${total}`
+      || ![null, 'identity'].includes(response.headers.get('content-encoding'))) {
+    fail('invalid_download_range', 'server did not return the exact approved byte range');
+  }
+  const length = response.headers.get('content-length');
+  if (length !== null && length !== String(end - start + 1)) {
+    fail('invalid_download_range', 'range Content-Length does not match the requested bytes');
+  }
+}
+
+/** Buffer one bounded range; discard network failures and retain only timeout prefixes. */
+async function readDownloadRange(response, start, end, total, signal) {
+  try { validateRangeResponse(response, start, end, total); }
+  catch (error) { await response.body?.cancel().catch(() => {}); throw error; }
+  if (!response.body) fail('asset_download_failed', 'range response body is unavailable');
+  const chunks = [];
+  let bytes = 0;
+  let timedOut = false;
+  try {
+    for await (const chunk of response.body) {
+      bytes += chunk.length;
+      if (bytes > end - start + 1) fail('invalid_download_range', 'range response exceeds its declared length');
+      chunks.push(Buffer.from(chunk));
+    }
+  } catch (error) {
+    if (error instanceof InstallError) throw error;
+    if (!signal.aborted || signal.reason?.name !== 'TimeoutError') {
+      throw new InstallError('download_network_failed', `range transfer failed: ${redactDiagnostic(error.message)}`, { cause: error });
+    }
+    timedOut = true;
+  }
+  if (!bytes) fail('download_stalled', 'download made no progress; inspect connectivity before starting a new plan');
+  if (!timedOut && bytes !== end - start + 1) fail('invalid_download_range', 'range response ended before its declared length');
+  return Buffer.concat(chunks, bytes);
+}
+
+function assertDownloadFile(target, context) {
+  const stat = assertRegularPath(target, 'file', 'invalid_download_cache');
+  if (stat.nlink !== 1) fail('invalid_download_cache', 'download cache must not have hard links');
+  assertPrivateAcl(target, false, context.identity, context.tools);
+  return stat;
+}
+
+function readDownloadJson(target, context) {
+  const stat = assertDownloadFile(target, context);
+  if (stat.size > MAXIMUM_JSON_BYTES) fail('invalid_download_cache', 'download metadata exceeds its size limit');
+  try { return JSON.parse(fs.readFileSync(target, 'utf8')); }
+  catch { fail('invalid_download_cache', 'download metadata is incomplete or invalid'); }
+}
+
+function writeDownloadJson(target, value, context) {
+  // Publish validated metadata atomically; a host kill leaves only an unused scratch file.
+  const scratch = `${target}.${crypto.randomUUID()}.tmp`;
+  try {
+    writePrivateFileExclusive(scratch, `${JSON.stringify(value)}\n`, context.identity, context.tools);
+    fs.renameSync(scratch, target);
+  } finally { removeFileQuietly(scratch); }
+}
+
+/** A leftover lock is inspected explicitly; never delete another invocation's lock. */
+function acquireDownloadLock(root, context) {
+  const lock = path.join(root, 'download.lock');
+  try {
+    writePrivateFileExclusive(lock, JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }), context.identity, context.tools);
+  } catch (error) {
+    if (error.code === 'EEXIST') fail('download_locked', 'another download or a host-killed invocation owns download.lock; inspect its process before recovery');
+    throw error;
+  }
+  return () => { assertDownloadFile(lock, context); fs.unlinkSync(lock); };
+}
+
+function rateLimitDelay(response, now = Date.now()) {
+  if (![403, 429].includes(response.status)) return null;
+  const retry = response.headers.get('retry-after');
+  const reset = response.headers.get('x-ratelimit-reset');
+  if (retry !== null) {
+    const seconds = /^\d+$/.test(retry) ? Number(retry) : Math.ceil((Date.parse(retry) - now) / 1000);
+    if (Number.isSafeInteger(seconds)) return Math.max(1, Math.min(seconds, 86400));
+  }
+  if (response.headers.get('x-ratelimit-remaining') === '0' && /^\d+$/.test(reset ?? '')) {
+    return Math.max(1, Math.min(86400, Math.ceil(Number(reset) - now / 1000)));
+  }
+  return response.status === 429 ? 60 : null;
+}
+
+function waitingDownload(plan, downloadedBytes, retryAfterSeconds, reason) {
+  return { status: 'download_waiting', stage: 'download', downloadedBytes,
+    totalBytes: plan.assets.installer.size, retryAfterSeconds, reason };
+}
+
+async function requestDownload(url, options) {
+  try { return await fetch(url, options); }
+  catch (error) {
+    const timeout = options.signal.aborted && options.signal.reason?.name === 'TimeoutError';
+    throw new InstallError(timeout ? 'download_timeout' : 'download_network_failed',
+      timeout ? 'download request timed out before receiving a valid range' : 'download request failed; inspect the network diagnostic',
+      { cause: error });
+  }
+}
+
+/** Download one range without installing, launching, or changing client configuration. */
+async function runDownload(args, context) {
+  const { plan, transactionRoot } = loadApprovedPlan(args, context);
+  const unlock = acquireDownloadLock(transactionRoot, context);
+  let offset = 0;
+  try {
+    const installerPath = path.join(transactionRoot, plan.assets.installer.name);
+    offset = fs.existsSync(installerPath) ? assertDownloadFile(installerPath, context).size : 0;
+    if (offset > plan.assets.installer.size) fail('invalid_download_cache', 'partial installer exceeds the approved size');
+    const snapshotPath = path.join(transactionRoot, 'download-release.json');
+    if (fs.existsSync(snapshotPath)) {
+      validateReleaseMatchesPlan(readDownloadJson(snapshotPath, context), plan);
+    } else {
+      const release = await invokeApiJson(`${API_ORIGIN}/repos/${RELEASE_REPOSITORY}/releases/${plan.release.id}`);
+      validateReleaseMatchesPlan(release, plan);
+      writeDownloadJson(snapshotPath, release, context);
+    }
+    const urlPath = path.join(transactionRoot, 'download-url.json');
+    const progress = (bytesThisStep) => ({ status: offset === plan.assets.installer.size ? 'downloaded' : 'download_pending',
+      stage: 'download', downloadedBytes: offset, totalBytes: plan.assets.installer.size, bytesThisStep,
+      expiresAt: plan.expiresAt });
+    if (offset === plan.assets.installer.size) {
+      assertFileDigest(installerPath, plan.assets.installer.sha256, 'installer');
+      if (fs.existsSync(urlPath)) { assertDownloadFile(urlPath, context); fs.unlinkSync(urlPath); }
+      return progress(0);
+    }
+    const source = new URL(plan.assets.installer.url);
+    let target = source;
+    let cached = false;
+    if (fs.existsSync(urlPath)) {
+      const record = readDownloadJson(urlPath, context);
+      let cachedUrl;
+      try { cachedUrl = new URL(record?.url); }
+      catch { fail('invalid_download_cache', 'cached download URL is invalid'); }
+      const created = Date.parse(record.createdAt);
+      if (record.assetId !== plan.assets.installer.id || !Number.isFinite(created)
+          || !isAllowedAssetRedirect(source, cachedUrl)) fail('invalid_download_cache', 'cached download URL is not bound to the approved asset');
+      if (created <= Date.now() && Date.now() - created < DOWNLOAD_URL_TTL_MILLISECONDS) {
+        target = cachedUrl; cached = true;
+      } else { fs.unlinkSync(urlPath); }
+    }
+    const end = Math.min(offset + DOWNLOAD_CHUNK_BYTES, plan.assets.installer.size) - 1;
+    const signal = AbortSignal.timeout(DOWNLOAD_TIMEOUT_MILLISECONDS);
+    const headers = { Range: `bytes=${offset}-${end}`, 'Accept-Encoding': 'identity' };
+    let response = await requestDownload(target, { redirect: 'manual', signal, headers: cached ? headers : {
+      ...headers, Accept: 'application/octet-stream', 'User-Agent': 'jishudb-agent-install/0.3', 'X-GitHub-Api-Version': API_VERSION,
+    } });
+    if (!cached && response.status === 302) {
+      const redirect = new URL(response.headers.get('location') ?? '', source);
+      if (!isAllowedAssetRedirect(source, redirect)) { await response.body?.cancel(); fail('invalid_asset_redirect', 'download redirect is outside the reviewed GitHub release host'); }
+      await response.body?.cancel();
+      writeDownloadJson(urlPath, { assetId: plan.assets.installer.id, url: redirect.href, createdAt: new Date().toISOString() }, context);
+      response = await requestDownload(redirect, { redirect: 'manual', signal, headers });
+    }
+    const delay = rateLimitDelay(response);
+    if (delay !== null) { await response.body?.cancel(); return waitingDownload(plan, offset, delay, 'rate_limited'); }
+    if (cached && response.status === 403) {
+      await response.body?.cancel(); fs.unlinkSync(urlPath);
+      return waitingDownload(plan, offset, 1, 'download_url_refresh_required');
+    }
+    if (response.status !== 206) { await response.body?.cancel(); fail('asset_download_failed', `installer range request returned HTTP ${response.status}`); }
+    const bytes = await readDownloadRange(response, offset, end, plan.assets.installer.size, signal);
+    // Recheck the current cache before appending a validated prefix; final SHA remains mandatory.
+    if (!fs.existsSync(installerPath)) writePrivateFileExclusive(installerPath, Buffer.alloc(0), context.identity, context.tools);
+    if (assertDownloadFile(installerPath, context).size !== offset) fail('invalid_download_cache', 'download cache changed during the request');
+    const descriptor = fs.openSync(installerPath, 'r+');
+    try {
+      let written = 0;
+      while (written < bytes.length) written += fs.writeSync(descriptor, bytes, written, bytes.length - written, offset + written);
+      fs.fsyncSync(descriptor);
+    } finally { fs.closeSync(descriptor); }
+    offset += bytes.length;
+    if (offset === plan.assets.installer.size) {
+      assertFileDigest(installerPath, plan.assets.installer.sha256, 'installer');
+      if (fs.existsSync(urlPath)) { assertDownloadFile(urlPath, context); fs.unlinkSync(urlPath); }
+    }
+    return progress(bytes.length);
+  } catch (error) {
+    if (error.category === 'github_rate_limited') return waitingDownload(plan, offset, error.retryAfterSeconds, 'rate_limited');
+    if (error instanceof InstallError) throw error;
+    if (error.code && /^(EACCES|EPERM|ENOSPC|EIO|ENOENT|EEXIST|EBUSY)$/.test(error.code)) {
+      throw new InstallError('download_storage_failed', `download cache I/O failed: ${redactDiagnostic(error.message)}`, { cause: error });
+    }
+    throw error;
+  } finally { unlock(); }
+}
+
+async function runExecute(args, context) {
+  const { plan, resolvedPlan, transactionRoot } = loadApprovedPlan(args, context);
   const mcpPort = Number(new URL(plan.connection.url).port);
   if (!await isTcpPortAvailable(mcpPort)) fail('endpoint_conflict', 'the approved Desktop MCP port is no longer available; create a new plan');
   for (const target of [plan.installation.applicationRoot, plan.installation.dataRoot]) {
@@ -1035,14 +1250,19 @@ async function runExecute(args, context) {
   const installerPath = path.join(transactionRoot, plan.assets.installer.name);
   const checksumPath = path.join(transactionRoot, plan.assets.checksum.name);
   const candidatePath = path.join(transactionRoot, plan.assets.candidate.name);
+  const unlock = acquireDownloadLock(transactionRoot, context);
   try {
+    if (!fs.existsSync(installerPath)) fail('download_required', 'run download until status=downloaded before execute');
+    assertDownloadFile(installerPath, context);
+    assertFileSize(installerPath, plan.assets.installer.size, 'installer');
+    assertFileDigest(installerPath, plan.assets.installer.sha256, 'installer');
     await assertReleaseMatchesPlan(plan);
     for (const [asset, destination, maximumBytes, timeoutMilliseconds] of [
       [plan.assets.candidate, candidatePath, MAXIMUM_JSON_BYTES, SMALL_ASSET_TIMEOUT_MILLISECONDS],
       [plan.assets.checksum, checksumPath, MAXIMUM_CHECKSUM_BYTES, SMALL_ASSET_TIMEOUT_MILLISECONDS],
-      [plan.assets.installer, installerPath, MAXIMUM_ASSET_BYTES, HTTP_TIMEOUT_MILLISECONDS],
     ]) {
-      await saveAsset(asset.url, destination, maximumBytes, timeoutMilliseconds);
+      if (fs.existsSync(destination)) assertDownloadFile(destination, context);
+      else await saveAsset(asset.url, destination, maximumBytes, timeoutMilliseconds);
       assertFileSize(destination, asset.size, asset.role);
       assertFileDigest(destination, asset.sha256, asset.role);
     }
@@ -1067,6 +1287,7 @@ async function runExecute(args, context) {
     if (candidate.revision !== plan.release.sourceRevision) fail('invalid_candidate', 'candidate source revision does not match the approved plan');
     await assertReleaseMatchesPlan(plan);
 
+    validatePlan(plan, context);
     const installer = childProcess.spawnSync(installerPath, [
       '/S',
       `/JISHUDB_AGENT_PLAN=${resolvedPlan}`,
@@ -1107,7 +1328,7 @@ async function runExecute(args, context) {
       next: 'wait_for_desktop_and_user_onboarding',
     };
   } finally {
-    for (const target of [installerPath, checksumPath, candidatePath]) removeFileQuietly(target);
+    unlock();
   }
 }
 
@@ -1141,15 +1362,18 @@ async function main(argv = process.argv.slice(2)) {
     let result;
     if (args.mode === 'check') result = await runCheck(context);
     else if (args.mode === 'plan') result = await runPlan(args, context);
+    else if (args.mode === 'download') result = await runDownload(args, context);
     else result = await runExecute(args, context);
     process.stdout.write(`${JSON.stringify(result)}\n`);
     return 0;
   } catch (error) {
     const diagnostic = redactDiagnostic(error?.message ?? error);
     process.stderr.write(`${diagnostic}\n`);
+    if (error?.cause) process.stderr.write(`${redactDiagnostic(error.cause?.cause?.code ?? error.cause.code ?? error.cause.message)}\n`);
     const known = error instanceof InstallError;
     process.stdout.write(`${JSON.stringify({
       status: 'failed',
+      stage: ['check', 'plan', 'download', 'execute'].includes(argv[0]) ? argv[0] : 'arguments',
       errorCategory: known ? error.category : 'unexpected_failure',
       message: known ? error.publicMessage : 'installation helper failed; inspect the local diagnostic',
     })}\n`);
@@ -1159,6 +1383,12 @@ async function main(argv = process.argv.slice(2)) {
 
 const exported = {
   InstallError,
+  validateRangeResponse,
+  readDownloadRange,
+  rateLimitDelay,
+  runDownload,
+  runExecute,
+  validateReleaseMatchesPlan,
   approvedDesktopMcpPorts,
   assertPlanShape,
   compareSemver,
