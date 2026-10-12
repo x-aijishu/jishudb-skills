@@ -257,14 +257,14 @@ test('expiry reached during execute metadata work cannot renew approval or launc
   assert.equal(fs.existsSync(path.join(path.dirname(approval.planPath), 'native-install-plan.json')), false);
 });
 
-test('production loader uses the packaged authority, never a key carried by the catalog', () => {
+test('production loader uses the packaged authority, never a key carried by the catalog', async () => {
   const runtime = Object.create(process);
   runtime.argv = [process.execPath, fileURLToPath(new URL('../skills/jishudb/scripts/install-windows.js', import.meta.url))];
   const sandbox = vm.createContext({ module: { exports: {} }, process: runtime, Buffer, URL });
   vm.runInContext(helperText.replace(/^#![^\n]*\n/, ''), sandbox);
   // The fixture has a valid signature under its own key, but that key is not
   // the independently approved production key shipped alongside the helper.
-  assert.throws(() => sandbox.module.exports.verifyMirrorCatalog(fixture().bytes(), {}, { approved: true }),
+  await assert.rejects(sandbox.module.exports.verifyMirrorCatalog(fixture().bytes(), {}, { approved: true }),
     error => error.category === 'catalog_signature_invalid');
 });
 
@@ -310,7 +310,10 @@ for (const change of ['dataRoot', 'instanceId', 'bootstrapBytes', 'application']
   test(`retained ${change} change does not prevent download and stops installation`, async t => {
     const h = await harness(t); const retained = retainedDataFixture(h);
     const approval = await h.plan();
-    if (change === 'application') fs.mkdirSync(approval.approval.applicationRoot, { recursive: true });
+    if (change === 'application') {
+      fs.mkdirSync(approval.approval.applicationRoot, { recursive: true });
+      fs.writeFileSync(path.join(approval.approval.applicationRoot, 'JishuDB.exe'), 'existing application');
+    }
     else if (change === 'bootstrapBytes') fs.appendFileSync(retained.bootstrapPath, '\n');
     else if (change === 'dataRoot') fs.rmSync(retained.markerPath);
     else {
@@ -378,4 +381,44 @@ test('removing a retained custom endpoint after approval cannot silently switch 
   assert.equal((await h.helper.runDownload(args(approval), h.environment)).status, 'downloaded');
   await assert.rejects(h.helper.runExecute(args(approval), h.environment), e => e.category === 'endpoint_conflict');
   assert.equal(h.interactiveLaunches.length, 0);
+});
+
+test('preserved-data reinstall accepts Python uninstall caches without deleting or changing them', async t => {
+  const h = await harness(t); const retained = retainedDataFixture(h);
+  const appRoot = path.join(h.environment.localAppData, 'Programs', 'JishuDB');
+  const cacheFile = path.join(appRoot, 'resources/runtime/python/Lib/encodings/__pycache__/utf_8.cpython-312.pyc');
+  fs.mkdirSync(path.dirname(cacheFile), { recursive: true }); fs.writeFileSync(cacheFile, 'retained bytecode');
+  const approval = await h.plan();
+  assert.equal((await h.helper.runDownload(args(approval), h.environment)).status, 'downloaded');
+  assert.equal((await h.helper.runExecute(args(approval), h.environment)).status, 'user_action_required');
+  assert.equal(fs.readFileSync(cacheFile, 'utf8'), 'retained bytecode');
+  assert.equal(fs.readFileSync(retained.sentinel, 'utf8'), 'existing data must survive');
+  assert.equal(h.launches.length, 0);
+  assert.equal(h.interactiveLaunches.length, 1);
+});
+
+for (const residue of ['notes.txt', 'resources/runtime/python/Lib/site.py', 'resources/app.asar', 'JishuDB.exe']) {
+  test(`preserved-data reinstall does not overwrite ${residue}`, async t => {
+    const h = await harness(t); retainedDataFixture(h);
+    const file = path.join(h.environment.localAppData, 'Programs/JishuDB', residue);
+    fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, 'must survive');
+    const approval = await h.plan();
+    assert.equal((await h.helper.runDownload(args(approval), h.environment)).status, 'downloaded');
+    await assert.rejects(h.helper.runExecute(args(approval), h.environment), error =>
+      ['existing_installation', 'application_state_requires_review'].includes(error.category));
+    assert.equal(h.interactiveLaunches.length, 0);
+    assert.equal(fs.readFileSync(file, 'utf8'), 'must survive');
+  });
+}
+
+test('linked Python uninstall caches cannot be admitted as harmless residue', async t => {
+  const h = await harness(t); retainedDataFixture(h);
+  const file = path.join(h.environment.localAppData, 'Programs/JishuDB/resources/runtime/python/Lib/__pycache__/test.pyc');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const outside = path.join(h.root, 'outside'); fs.writeFileSync(outside, 'must survive'); fs.linkSync(outside, file);
+  const approval = await h.plan();
+  assert.equal((await h.helper.runDownload(args(approval), h.environment)).status, 'downloaded');
+  await assert.rejects(h.helper.runExecute(args(approval), h.environment), error => error.category === 'application_state_requires_review');
+  assert.equal(h.interactiveLaunches.length, 0);
+  assert.equal(fs.readFileSync(outside, 'utf8'), 'must survive');
 });

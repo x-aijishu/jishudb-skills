@@ -90,7 +90,7 @@ test('reinstallation preserves a valid saved endpoint byte for byte and selects 
   const url = await h.helper.selectInstallationEndpoint(h.installation.bootstrapPath);
   assert.equal(url, 'http://127.0.0.1:8093/mcp');
   h.helper.assertFreshInstallationDestinations(h.installation);
-  h.helper.writeDesktopEndpointConfig(h.installation.bootstrapPath, url, h.environment);
+  await h.helper.writeDesktopEndpointConfig(h.installation.bootstrapPath, url, h.environment);
   assert.deepEqual(fs.readFileSync(h.endpoint), before);
 });
 
@@ -98,8 +98,8 @@ test('fresh endpoint creation remains exclusive and subsequent reuse is idempote
   const h = harness(t, { occupied: [8088] });
   const url = await h.helper.selectInstallationEndpoint(h.installation.bootstrapPath);
   assert.equal(url, 'http://127.0.0.1:8090/mcp');
-  h.helper.writeDesktopEndpointConfig(h.installation.bootstrapPath, url, h.environment);
-  h.helper.writeDesktopEndpointConfig(h.installation.bootstrapPath, url, h.environment);
+  await h.helper.writeDesktopEndpointConfig(h.installation.bootstrapPath, url, h.environment);
+  await h.helper.writeDesktopEndpointConfig(h.installation.bootstrapPath, url, h.environment);
   assert.deepEqual(JSON.parse(fs.readFileSync(h.endpoint)), { localPort: 8090, schemaVersion: 1 });
 });
 

@@ -313,6 +313,11 @@ Write the reviewed endpoint beside `data-location.json` as
 `desktop-endpoint.json` before launch. The Skill helper uses Node.js HTTPS,
 streaming SHA-256 validation, argument-array process launch, and Windows-native
 SID/ACL tools; PowerShell and its execution policy are not prerequisites.
+Identity and ACL calls use asynchronous child-process pipes with a 30-second
+deadline and a combined 1 MiB output limit. Start failures preserve their OS
+cause; nonzero exits, timeouts, interrupted processes and excessive output remain
+distinct errors. No shell substitution, alternate executable or skipped ACL
+check is a compatibility fallback.
 
 `desktop-endpoint.json` stores a reusable port preference. `data-location.json`
 stores the data directory and instance identity. Neither file alone proves that
@@ -332,8 +337,14 @@ current-user, expiry, immutable-release, catalog and asset checks apply. This
 helper-only plan is never passed to the native `/JISHUDB_AGENT_PLAN` parser:
 released Windows installers accept only absent destinations on that silent path.
 
-Reinstall execute requires the application directory to be absent and verifies
-that the retained location/ownership still matches approval. It starts the
+Reinstall execute requires application executables to be absent and verifies
+that the retained location/ownership still matches approval. An absent or empty
+application directory is accepted. A bounded tree containing only Python
+`resources/runtime/python/**/__pycache__/*.pyc` uninstall residue is also accepted
+without deleting it. Existing application markers (`JishuDB.exe`, `app.asar`, or
+the service executable), unrecognized files, links and oversized residue trees
+stop execution for review. These checks run again before starting the installer.
+It starts the
 already verified installer in its ordinary interactive mode and returns `user_action_required` with
 `next=complete_interactive_reinstall_and_verify_existing_data`. The native
 installer reads the retained bootstrap and validates data ownership. The user

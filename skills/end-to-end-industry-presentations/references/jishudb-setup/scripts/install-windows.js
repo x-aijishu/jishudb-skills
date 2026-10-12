@@ -224,14 +224,14 @@ function mirrorFloorRoot(context) {
   return path.join(context.localAppData, 'JishuDBAgentInstall');
 }
 
-function readMirrorFloor(context) {
+async function readMirrorFloor(context) {
   const root = mirrorFloorRoot(context);
   if (!fs.existsSync(root)) return null;
   assertRegularPath(root, 'directory', 'invalid_catalog_state');
-  assertPrivateAcl(root, true, context.identity, context.tools);
+  await assertPrivateAcl(root, true, context.identity, context.tools);
   const filename = path.join(root, 'release-floor.json');
   if (!fs.existsSync(filename)) return null;
-  const floor = readDownloadJson(filename, context);
+  const floor = await readDownloadJson(filename, context);
   requireExactProperties(floor, ['sequence', 'version', 'payloadSha256'], 'catalog floor');
   requireSafeInteger(floor.sequence, 'catalog sequence', { positive: true });
   requirePattern(floor.version, SEMVER_PATTERN, 'catalog floor version');
@@ -239,14 +239,14 @@ function readMirrorFloor(context) {
   return floor;
 }
 
-function verifyMirrorCatalog(bytes, context, { approved = false } = {}) {
+async function verifyMirrorCatalog(bytes, context, { approved = false } = {}) {
   const { catalog, trust } = loadMirrorSupport();
   let envelope;
   try { envelope = JSON.parse(bytes.toString('utf8')); }
   catch (error) { throw new InstallError('catalog_invalid', 'CNB catalog is not valid JSON', { cause: error }); }
   // An existing exact approval remains valid until its original expiry even
   // when another transaction has subsequently selected a newer catalog.
-  const floor = approved ? null : readMirrorFloor(context);
+  const floor = approved ? null : await readMirrorFloor(context);
   const minimumSequence = Math.max(trust.minimumSequence ?? 0, floor?.sequence ?? 0);
   const minimumVersion = floor && compareVersion(floor.version, trust.minimumVersion ?? '0.0.0') > 0 ? floor.version : trust.minimumVersion ?? '0.0.0';
   try {
@@ -260,21 +260,21 @@ function verifyMirrorCatalog(bytes, context, { approved = false } = {}) {
   } catch (error) { mirrorFailure(error); }
 }
 
-function advanceMirrorFloor(source, context) {
+async function advanceMirrorFloor(source, context) {
   const root = mirrorFloorRoot(context);
-  if (!fs.existsSync(root)) createPrivateDirectory(root, context.identity, context.tools);
+  if (!fs.existsSync(root)) await createPrivateDirectory(root, context.identity, context.tools);
   assertRegularPath(root, 'directory', 'invalid_catalog_state');
-  assertPrivateAcl(root, true, context.identity, context.tools);
-  const unlock = acquireDownloadLock(root, context);
+  await assertPrivateAcl(root, true, context.identity, context.tools);
+  const unlock = await acquireDownloadLock(root, context);
   try {
     // Reverify under the lock so concurrent selections cannot lower the floor.
-    const fresh = verifyMirrorCatalog(source.catalogBytes, context);
-    writeDownloadJson(path.join(root, 'release-floor.json'), {
+    const fresh = await verifyMirrorCatalog(source.catalogBytes, context);
+    await writeDownloadJson(path.join(root, 'release-floor.json'), {
       sequence: fresh.verified.payload.sequence,
       version: fresh.verified.payload.version,
       payloadSha256: fresh.verified.payloadSha256,
     }, context);
-  } finally { unlock(); }
+  } finally { await unlock(); }
 }
 
 function mirrorSelection(source) {
@@ -306,12 +306,12 @@ function createMirrorEnvelope(planBytes, source) {
   return { schema: MIRROR_PLAN_SCHEMA, nativePlan: bindBytes(planBytes), catalog: bindBytes(source.catalogBytes), transport: mirrorTransport(source) };
 }
 
-function unwrapMirrorEnvelope(envelope, context) {
+async function unwrapMirrorEnvelope(envelope, context) {
   requireExactProperties(envelope, ['schema', 'nativePlan', 'catalog', 'transport'], 'mirror envelope');
   if (envelope.schema !== MIRROR_PLAN_SCHEMA) fail('invalid_plan', 'unsupported mirror envelope schema');
   const nativeBytes = decodeBoundBytes(envelope.nativePlan, MAXIMUM_PLAN_BYTES, 'native plan');
   const catalogBytes = decodeBoundBytes(envelope.catalog, MAXIMUM_CATALOG_BYTES, 'catalog');
-  const source = verifyMirrorCatalog(catalogBytes, context, { approved: true });
+  const source = await verifyMirrorCatalog(catalogBytes, context, { approved: true });
   requireExactProperties(envelope.transport, ['source', 'assets'], 'transport');
   requireExactProperties(envelope.transport.assets, ['installer', 'checksum', 'candidate'], 'transport assets');
   const expected = mirrorTransport(source);
@@ -365,7 +365,7 @@ async function discoverMirror(context) {
     if (error instanceof InstallError) throw error;
     throw new InstallError('catalog_transfer_interrupted', 'CNB catalog transfer was interrupted; inspect the network diagnostic', { cause: error });
   }
-  const source = verifyMirrorCatalog(bytes, context);
+  const source = await verifyMirrorCatalog(bytes, context);
   return { source, selected: mirrorSelection(source) };
 }
 
@@ -386,7 +386,7 @@ function allowedSourceRedirect(source, initial, target) {
 
 async function assertSourceMatchesPlan(plan, source, context) {
   if (source?.kind !== 'cnb') return assertReleaseMatchesPlan(plan);
-  const verified = verifyMirrorCatalog(source.catalogBytes, context, { approved: true });
+  const verified = await verifyMirrorCatalog(source.catalogBytes, context, { approved: true });
   validateMirrorPlanBinding(plan, verified);
   return mirrorSelection(verified).release;
 }
@@ -466,27 +466,60 @@ function resolveSystemTools() {
   return tools;
 }
 
-function runNative(command, args, options = {}) {
+async function runNative(command, args, options = {}) {
   const resolvedCommand = assertNoReparseAncestors(command, 'native command');
-  const result = childProcess.spawnSync(resolvedCommand, args, {
-    encoding: options.encoding ?? 'utf8',
-    env: options.env ?? process.env,
-    maxBuffer: options.maxBuffer ?? 1024 * 1024,
-    stdio: options.stdio,
-    shell: false,
-    windowsHide: true,
+  // AI-assisted: asynchronously capture trusted system-tool output. Some host
+  // environments reject synchronous pipe creation with EBUSY; do not bypass
+  // SID/ACL validation or fall back to a shell or an unverified executable.
+  const label = options.label ?? path.basename(command);
+  const result = await new Promise((resolve, reject) => {
+    let child;
+    const startFailure = cause => new InstallError('native_command_start_failed', `${label} could not start${cause.code ? ` (${cause.code})` : ''}`, { cause });
+    try {
+      child = childProcess.spawn(resolvedCommand, args, {
+        env: options.env ?? process.env, stdio: ['ignore', 'pipe', 'pipe'],
+        shell: false, windowsHide: true,
+      });
+    } catch (error) { reject(startFailure(error)); return; }
+    const stdout = [], stderr = [];
+    let size = 0, failure = null;
+    const stop = error => {
+      if (failure) return;
+      failure = error;
+      child.kill();
+    };
+    const timer = setTimeout(() => stop(new InstallError('native_command_timeout', `${label} exceeded its execution deadline`)), options.timeoutMilliseconds ?? 30000);
+    const capture = chunks => chunk => {
+      if (failure) return;
+      const bytes = Buffer.from(chunk);
+      size += bytes.length;
+      if (size > (options.maxBuffer ?? 1024 * 1024)) {
+        stop(new InstallError('native_command_output_limit', `${label} exceeded its output limit`));
+      } else chunks.push(bytes);
+    };
+    child.stdout?.on('data', capture(stdout));
+    child.stderr?.on('data', capture(stderr));
+    const streamFailure = cause => stop(new InstallError('native_command_io_failed', `${label} output could not be read`, { cause }));
+    child.stdout?.once('error', streamFailure);
+    child.stderr?.once('error', streamFailure);
+    child.once('error', error => { clearTimeout(timer); reject(startFailure(error)); });
+    child.once('close', (status, signal) => {
+      clearTimeout(timer);
+      if (failure) { reject(failure); return; }
+      if (signal) { reject(new InstallError('native_command_interrupted', `${label} was interrupted by ${signal}`)); return; }
+      resolve({ status, stdout: Buffer.concat(stdout).toString(options.encoding ?? 'utf8'), stderr: Buffer.concat(stderr).toString(options.encoding ?? 'utf8') });
+    });
   });
-  if (result.error) throw result.error;
   if (result.status !== 0) {
-    const diagnostic = options.stdio ? `exit ${result.status}` : (result.stderr || result.stdout || `exit ${result.status}`).trim();
-    fail(options.category ?? 'native_command_failed', `${options.label ?? path.basename(command)} failed: ${diagnostic}`);
+    const diagnostic = (result.stderr || result.stdout || `exit ${result.status}`).trim();
+    fail(options.category ?? 'native_command_failed', `${label} failed: ${diagnostic}`);
   }
   return result;
 }
 
-function getCurrentWindowsIdentity(tools) {
-  const account = runNative(tools.whoami, [], { label: 'whoami' }).stdout.trim();
-  const user = runNative(tools.whoami, ['/user', '/fo', 'csv', '/nh'], { label: 'whoami SID' }).stdout;
+async function getCurrentWindowsIdentity(tools) {
+  const account = (await runNative(tools.whoami, [], { label: 'whoami' })).stdout.trim();
+  const user = (await runNative(tools.whoami, ['/user', '/fo', 'csv', '/nh'], { label: 'whoami SID' })).stdout;
   const sid = user.match(/S-1-[0-9]+(?:-[0-9]+)+/)?.[0] ?? '';
   if (!account || /[\0\r\n]/.test(account) || !SID_PATTERN.test(sid)) {
     fail('unsupported_platform', 'current Windows account or SID is invalid');
@@ -552,8 +585,8 @@ function isPrivateAclEntries(entries, directory, identity) {
     && tokens.every((token, index) => token === expectedTokens[index]);
 }
 
-function assertPrivateAcl(target, directory, identity, tools) {
-  const result = runNative(tools.icacls, [target], { label: 'inspect private ACL' });
+async function assertPrivateAcl(target, directory, identity, tools) {
+  const result = await runNative(tools.icacls, [target], { label: 'inspect private ACL' });
   const entries = parseIcaclsEntries(result.stdout, target);
   if (!isPrivateAclEntries(entries, directory, identity)) {
     const allowedIdentities = new Set(
@@ -572,29 +605,29 @@ function assertPrivateAcl(target, directory, identity, tools) {
   }
 }
 
-function setPrivateAcl(target, directory, identity, tools) {
+async function setPrivateAcl(target, directory, identity, tools) {
   assertRegularPath(target, directory ? 'directory' : 'file', 'invalid_permissions');
-  runNative(tools.icacls, [target, '/inheritancelevel:r'], { label: 'disable ACL inheritance' });
-  runNative(
+  await runNative(tools.icacls, [target, '/inheritancelevel:r'], { label: 'disable ACL inheritance' });
+  await runNative(
     tools.icacls,
     [target, '/remove:g', '*S-1-5-18', '*S-1-5-32-544'],
     { label: 'remove system and administrator ACL grants' },
   );
   const grant = `*${identity.sid}:${directory ? '(OI)(CI)F' : 'F'}`;
-  runNative(tools.icacls, [target, '/grant:r', grant], { label: 'set private ACL' });
-  runNative(tools.icacls, [target, '/setowner', `*${identity.sid}`], { label: 'set private owner' });
-  runNative(tools.icacls, [target, '/verify'], { label: 'verify private ACL' });
-  assertPrivateAcl(target, directory, identity, tools);
+  await runNative(tools.icacls, [target, '/grant:r', grant], { label: 'set private ACL' });
+  await runNative(tools.icacls, [target, '/setowner', `*${identity.sid}`], { label: 'set private owner' });
+  await runNative(tools.icacls, [target, '/verify'], { label: 'verify private ACL' });
+  await assertPrivateAcl(target, directory, identity, tools);
 }
 
-function createPrivateDirectory(target, identity, tools) {
+async function createPrivateDirectory(target, identity, tools) {
   const resolved = normalizeLocalWindowsPath(target, 'private directory');
   assertNoReparseAncestors(path.win32.dirname(resolved), 'private directory parent');
   fs.mkdirSync(resolved, { recursive: false });
-  setPrivateAcl(resolved, true, identity, tools);
+  await setPrivateAcl(resolved, true, identity, tools);
 }
 
-function writePrivateFileExclusive(target, content, identity, tools) {
+async function writePrivateFileExclusive(target, content, identity, tools) {
   const descriptor = fs.openSync(target, 'wx', 0o600);
   try {
     fs.writeFileSync(descriptor, content);
@@ -602,7 +635,7 @@ function writePrivateFileExclusive(target, content, identity, tools) {
   } finally {
     fs.closeSync(descriptor);
   }
-  setPrivateAcl(target, false, identity, tools);
+  await setPrivateAcl(target, false, identity, tools);
   assertRegularPath(target, 'file');
 }
 
@@ -1063,24 +1096,64 @@ function readRetainedInstallation(installation) {
   return { dataRoot, retainedData: { instanceId: value.instanceId, bootstrapSha256: bootstrap.sha256, markerSha256: marker.sha256 } };
 }
 
-function assertReinstallationDestinations(plan) {
-  assertNoReparseAncestors(plan.installation.applicationRoot, 'application directory');
-  try { fs.lstatSync(plan.installation.applicationRoot); }
+/** Admit only absent applications or bounded, recognized uninstall cache residue. */
+function assertReinstallableApplication(applicationRoot) {
+  assertNoReparseAncestors(applicationRoot, 'application directory');
+  try { fs.lstatSync(applicationRoot); }
   catch (error) {
     if (error.code !== 'ENOENT') throw new InstallError('installation_inspection_failed', 'could not inspect the application directory', { cause: error });
-    const current = readRetainedInstallation(plan.installation);
-    if (!current || current.dataRoot !== plan.installation.dataRoot
-        || Object.keys(plan.retainedData).some(key => current.retainedData[key] !== plan.retainedData[key])) {
-      fail('installation_state_changed', 'retained data location or ownership changed after approval; inspect it and create a new plan');
-    }
-    const endpoint = readSavedDesktopEndpoint(plan.installation.bootstrapPath);
-    const actualURL = endpoint?.mcpUrl ?? `http://127.0.0.1:${PREFERRED_MCP_PORT}/mcp`;
-    if (plan.connection && actualURL !== plan.connection.url) {
-      fail('endpoint_conflict', 'retained Desktop endpoint changed after approval; create a new plan without overwriting configuration');
-    }
     return;
   }
-  fail('existing_installation', 'application files already exist; verify and start the existing Desktop instead of reinstalling');
+  assertRegularPath(applicationRoot, 'directory', 'application_state_requires_review');
+  const executableMarkers = ['JishuDB.exe', 'resources/app.asar', 'resources/runtime/jishudb.exe'];
+  for (const relative of executableMarkers) {
+    try { fs.lstatSync(path.join(applicationRoot, relative)); }
+    catch (error) {
+      if (error.code === 'ENOENT') continue;
+      throw new InstallError('installation_inspection_failed', 'could not inspect installed application files', { cause: error });
+    }
+    fail('existing_installation', 'application files already exist; verify and start the existing Desktop instead of reinstalling');
+  }
+  // AI-assisted: allow the observed Python bytecode left by uninstall, without
+  // deleting it or admitting arbitrary user files, links or unbounded trees.
+  const pending = [''];
+  let entries = 0, bytes = 0;
+  while (pending.length) {
+    const relative = pending.pop();
+    for (const entry of fs.readdirSync(path.join(applicationRoot, relative), { withFileTypes: true })) {
+      if (++entries > 4096) fail('application_state_requires_review', 'application residue exceeds the inspection limit');
+      const child = path.posix.join(relative, entry.name);
+      const target = path.join(applicationRoot, child);
+      const stat = assertRegularPath(target, entry.isDirectory() ? 'directory' : 'file', 'application_state_requires_review');
+      if (entry.isDirectory()) {
+        if (!['resources', 'resources/runtime', 'resources/runtime/python'].includes(child)
+            && !child.startsWith('resources/runtime/python/')) {
+          fail('application_state_requires_review', 'application directory contains unrecognized content; preserve it for review');
+        }
+        pending.push(child);
+      } else {
+        bytes += stat.size;
+        if (stat.nlink !== 1 || bytes > 64 * 1024 * 1024
+            || !/^resources\/runtime\/python\/(?:[^/]+\/)*__pycache__\/[^/]+\.pyc$/.test(child)) {
+          fail('application_state_requires_review', 'application directory contains unrecognized content; preserve it for review');
+        }
+      }
+    }
+  }
+}
+
+function assertReinstallationDestinations(plan) {
+  assertReinstallableApplication(plan.installation.applicationRoot);
+  const current = readRetainedInstallation(plan.installation);
+  if (!current || current.dataRoot !== plan.installation.dataRoot
+      || Object.keys(plan.retainedData).some(key => current.retainedData[key] !== plan.retainedData[key])) {
+    fail('installation_state_changed', 'retained data location or ownership changed after approval; inspect it and create a new plan');
+  }
+  const endpoint = readSavedDesktopEndpoint(plan.installation.bootstrapPath);
+  const actualURL = endpoint?.mcpUrl ?? `http://127.0.0.1:${PREFERRED_MCP_PORT}/mcp`;
+  if (plan.connection && actualURL !== plan.connection.url) {
+    fail('endpoint_conflict', 'retained Desktop endpoint changed after approval; create a new plan without overwriting configuration');
+  }
 }
 
 function assertDesktopEndpointCompatible(bootstrapPath, mcpUrl) {
@@ -1115,7 +1188,7 @@ async function launchInteractiveReinstallation(installerPath, plan, loaded, cont
   // AI-assisted: a private, exclusive receipt prevents repeated execute from
   // launching another installer. The exact approved data identity is rechecked
   // by the caller; the native installer retains its own ownership validation.
-  writePrivateFileExclusive(receiptPath, `${JSON.stringify({
+  await writePrivateFileExclusive(receiptPath, `${JSON.stringify({
     schemaVersion: 1, planSha256: loaded.approvalSha256, version: plan.release.version,
     dataRoot: plan.installation.dataRoot, instanceId: plan.retainedData.instanceId,
     status: 'launch_requested',
@@ -1158,9 +1231,9 @@ async function runCheck(context) {
   assertWindowsX64();
   const probeRoot = path.join(context.tempRoot, `JishuDBAgentCheck-${crypto.randomUUID().replaceAll('-', '')}`);
   try {
-    createPrivateDirectory(probeRoot, context.identity, context.tools);
+    await createPrivateDirectory(probeRoot, context.identity, context.tools);
     const probeFile = path.join(probeRoot, 'acl-probe.json');
-    writePrivateFileExclusive(probeFile, '{}\n', context.identity, context.tools);
+    await writePrivateFileExclusive(probeFile, '{}\n', context.identity, context.tools);
     const releaseProbe = await getReleasePages(async (page) => [{ page }]);
     if (releaseProbe.length !== 1 || releaseProbe[0].page !== 1) {
       fail('unsupported_node_runtime', 'Node.js release-list behavior is incompatible');
@@ -1211,7 +1284,7 @@ async function runPlan(args, context) {
   let planParentCreated = false;
   let planReady = false;
   try {
-    createPrivateDirectory(evidenceRoot, context.identity, context.tools);
+    await createPrivateDirectory(evidenceRoot, context.identity, context.tools);
     const { selected, source } = args.releaseSource === 'cnb' ? await discoverMirror(context) : { selected: await selectEligibleRelease(), source: null };
     const candidatePath = path.join(evidenceRoot, 'candidate.json');
     const checksumPath = path.join(evidenceRoot, 'checksum.txt');
@@ -1248,7 +1321,7 @@ async function runPlan(args, context) {
         fail('invalid_plan_path', 'custom plan parent must have an existing local parent directory');
       }
       planParentCreated = true;
-      createPrivateDirectory(targetPlanParent, context.identity, context.tools);
+      await createPrivateDirectory(targetPlanParent, context.identity, context.tools);
     }
 
     const now = new Date();
@@ -1302,8 +1375,8 @@ async function runPlan(args, context) {
     const approvalBytes = source ? Buffer.from(`${JSON.stringify(createMirrorEnvelope(planBytes, source), null, 2)}\n`) : planBytes;
     if (approvalBytes.length > MAXIMUM_APPROVAL_BYTES) fail('invalid_plan', 'approval envelope exceeds the size limit');
     const digest = sha256Bytes(approvalBytes);
-    writePrivateFileExclusive(targetPlanPath, approvalBytes, context.identity, context.tools);
-    if (source) advanceMirrorFloor(source, context);
+    await writePrivateFileExclusive(targetPlanPath, approvalBytes, context.identity, context.tools);
+    if (source) await advanceMirrorFloor(source, context);
     if (sha256File(targetPlanPath) !== digest) fail('plan_drift', 'plan changed before approval');
     planReady = true;
     return {
@@ -1425,18 +1498,18 @@ function validatePlan(plan, context) {
   }
 }
 
-function writeDesktopEndpointConfig(bootstrapPath, mcpUrl, context) {
+async function writeDesktopEndpointConfig(bootstrapPath, mcpUrl, context) {
   // Preserve the exact retained file when its validated port matches approval.
   if (assertDesktopEndpointCompatible(bootstrapPath, mcpUrl)) return;
   const stateRoot = path.dirname(bootstrapPath);
-  if (!fs.existsSync(stateRoot)) createPrivateDirectory(stateRoot, context.identity, context.tools);
+  if (!fs.existsSync(stateRoot)) await createPrivateDirectory(stateRoot, context.identity, context.tools);
   else assertRegularPath(stateRoot, 'directory', 'invalid_endpoint');
   const endpointPath = path.join(stateRoot, ENDPOINT_CONFIG_FILENAME);
   const port = Number(new URL(mcpUrl).port);
-  writePrivateFileExclusive(endpointPath, `${JSON.stringify({ localPort: port, schemaVersion: ENDPOINT_CONFIG_SCHEMA }, null, 2)}\n`, context.identity, context.tools);
+  await writePrivateFileExclusive(endpointPath, `${JSON.stringify({ localPort: port, schemaVersion: ENDPOINT_CONFIG_SCHEMA }, null, 2)}\n`, context.identity, context.tools);
 }
 
-function loadApprovedPlan(args, context) {
+async function loadApprovedPlan(args, context) {
   assertWindowsX64();
   if (!args.planPath.trim() || !args.planSha256.trim()) fail('invalid_arguments', 'PlanPath and PlanSha256 are required in download or execute mode');
   requirePattern(args.planSha256, SHA256_PATTERN, 'PlanSha256');
@@ -1449,10 +1522,10 @@ function loadApprovedPlan(args, context) {
   }
   const transactionRoot = path.dirname(resolvedPlan);
   assertRegularPath(transactionRoot, 'directory');
-  assertPrivateAcl(transactionRoot, true, context.identity, context.tools);
+  await assertPrivateAcl(transactionRoot, true, context.identity, context.tools);
   const planStat = assertRegularPath(resolvedPlan, 'file');
   if (planStat.size <= 0 || planStat.size > MAXIMUM_APPROVAL_BYTES) fail('invalid_plan', 'plan size is invalid');
-  assertPrivateAcl(resolvedPlan, false, context.identity, context.tools);
+  await assertPrivateAcl(resolvedPlan, false, context.identity, context.tools);
   const planBytes = fs.readFileSync(resolvedPlan);
   if (planBytes.length !== planStat.size || sha256Bytes(planBytes) !== args.planSha256) {
     fail('plan_digest_mismatch', 'plan SHA-256 does not match the approved digest');
@@ -1464,7 +1537,7 @@ function loadApprovedPlan(args, context) {
     fail('invalid_plan', 'plan JSON is invalid');
   }
   let decoded = { plan, source: null, nativeSha256: args.planSha256 };
-  if (plan?.schema === MIRROR_PLAN_SCHEMA) decoded = unwrapMirrorEnvelope(plan, context);
+  if (plan?.schema === MIRROR_PLAN_SCHEMA) decoded = await unwrapMirrorEnvelope(plan, context);
   else {
     if (planBytes.length > MAXIMUM_PLAN_BYTES) fail('invalid_plan', 'native plan exceeds the size limit');
     validatePlan(plan, context);
@@ -1514,39 +1587,39 @@ async function readDownloadRange(response, start, end, total, signal) {
   return Buffer.concat(chunks, bytes);
 }
 
-function assertDownloadFile(target, context) {
+async function assertDownloadFile(target, context) {
   const stat = assertRegularPath(target, 'file', 'invalid_download_cache');
   if (stat.nlink !== 1) fail('invalid_download_cache', 'download cache must not have hard links');
-  assertPrivateAcl(target, false, context.identity, context.tools);
+  await assertPrivateAcl(target, false, context.identity, context.tools);
   return stat;
 }
 
-function readDownloadJson(target, context) {
-  const stat = assertDownloadFile(target, context);
+async function readDownloadJson(target, context) {
+  const stat = await assertDownloadFile(target, context);
   if (stat.size > MAXIMUM_JSON_BYTES) fail('invalid_download_cache', 'download metadata exceeds its size limit');
   try { return JSON.parse(fs.readFileSync(target, 'utf8')); }
   catch { fail('invalid_download_cache', 'download metadata is incomplete or invalid'); }
 }
 
-function writeDownloadJson(target, value, context) {
+async function writeDownloadJson(target, value, context) {
   // Publish validated metadata atomically; a host kill leaves only an unused scratch file.
   const scratch = `${target}.${crypto.randomUUID()}.tmp`;
   try {
-    writePrivateFileExclusive(scratch, `${JSON.stringify(value)}\n`, context.identity, context.tools);
+    await writePrivateFileExclusive(scratch, `${JSON.stringify(value)}\n`, context.identity, context.tools);
     fs.renameSync(scratch, target);
   } finally { removeFileQuietly(scratch); }
 }
 
 /** A leftover lock is inspected explicitly; never delete another invocation's lock. */
-function acquireDownloadLock(root, context) {
+async function acquireDownloadLock(root, context) {
   const lock = path.join(root, 'download.lock');
   try {
-    writePrivateFileExclusive(lock, JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }), context.identity, context.tools);
+    await writePrivateFileExclusive(lock, JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }), context.identity, context.tools);
   } catch (error) {
     if (error.code === 'EEXIST') fail('download_locked', 'another download or a host-killed invocation owns download.lock; inspect its process before recovery');
     throw error;
   }
-  return () => { assertDownloadFile(lock, context); fs.unlinkSync(lock); };
+  return async () => { await assertDownloadFile(lock, context); fs.unlinkSync(lock); };
 }
 
 function rateLimitDelay(response, now = Date.now()) {
@@ -1581,22 +1654,22 @@ async function requestDownload(url, options) {
 /** Download one range without installing, launching, or changing client configuration. */
 async function runDownload(args, context) {
   assertReleaseSourceAvailable(args.releaseSource);
-  const { plan, transactionRoot, source: sourceInfo, approvalSha256 } = loadApprovedPlan(args, context);
-  const unlock = acquireDownloadLock(transactionRoot, context);
+  const { plan, transactionRoot, source: sourceInfo, approvalSha256 } = await loadApprovedPlan(args, context);
+  const unlock = await acquireDownloadLock(transactionRoot, context);
   let offset = 0;
   try {
     const installerPath = path.join(transactionRoot, plan.assets.installer.name);
-    offset = fs.existsSync(installerPath) ? assertDownloadFile(installerPath, context).size : 0;
+    offset = fs.existsSync(installerPath) ? (await assertDownloadFile(installerPath, context)).size : 0;
     if (offset > plan.assets.installer.size) fail('invalid_download_cache', 'partial installer exceeds the approved size');
     const snapshotPath = path.join(transactionRoot, 'download-release.json');
     if (sourceInfo && offset > 0 && !fs.existsSync(snapshotPath)) fail('invalid_download_cache', 'partial mirror cache has no approval binding');
     if (fs.existsSync(snapshotPath)) {
-      const snapshot = readDownloadJson(snapshotPath, context);
+      const snapshot = await readDownloadJson(snapshotPath, context);
       if (sourceInfo && (snapshot.approvalSha256 !== approvalSha256 || snapshot.catalogSha256 !== sha256Bytes(sourceInfo.catalogBytes))) fail('invalid_download_cache', 'cached release belongs to another approval');
       validateReleaseMatchesPlan(snapshot, plan);
     } else {
       const release = await assertSourceMatchesPlan(plan, sourceInfo, context);
-      writeDownloadJson(snapshotPath, sourceInfo ? { ...release, approvalSha256, catalogSha256: sha256Bytes(sourceInfo.catalogBytes) } : release, context);
+      await writeDownloadJson(snapshotPath, sourceInfo ? { ...release, approvalSha256, catalogSha256: sha256Bytes(sourceInfo.catalogBytes) } : release, context);
     }
     const urlPath = path.join(transactionRoot, 'download-url.json');
     const progress = (bytesThisStep) => ({ status: offset === plan.assets.installer.size ? 'downloaded' : 'download_pending',
@@ -1604,14 +1677,14 @@ async function runDownload(args, context) {
       expiresAt: plan.expiresAt });
     if (offset === plan.assets.installer.size) {
       assertFileDigest(installerPath, plan.assets.installer.sha256, 'installer');
-      if (fs.existsSync(urlPath)) { assertDownloadFile(urlPath, context); fs.unlinkSync(urlPath); }
+      if (fs.existsSync(urlPath)) { await assertDownloadFile(urlPath, context); fs.unlinkSync(urlPath); }
       return progress(0);
     }
     const source = new URL(sourceAssetURL(sourceInfo, plan.assets.installer));
     let target = source;
     let cached = false;
     if (fs.existsSync(urlPath)) {
-      const record = readDownloadJson(urlPath, context);
+      const record = await readDownloadJson(urlPath, context);
       let cachedUrl;
       try { cachedUrl = new URL(record?.url); }
       catch { fail('invalid_download_cache', 'cached download URL is invalid'); }
@@ -1633,7 +1706,7 @@ async function runDownload(args, context) {
       const redirect = new URL(response.headers.get('location') ?? '', source);
       if (!allowedSourceRedirect(sourceInfo, source, redirect)) { await response.body?.cancel(); fail('invalid_asset_redirect', 'download redirect is outside the approved transport policy'); }
       await response.body?.cancel();
-      writeDownloadJson(urlPath, { assetId: plan.assets.installer.id, url: redirect.href, createdAt: new Date().toISOString(), ...(sourceInfo ? { approvalSha256 } : {}) }, context);
+      await writeDownloadJson(urlPath, { assetId: plan.assets.installer.id, url: redirect.href, createdAt: new Date().toISOString(), ...(sourceInfo ? { approvalSha256 } : {}) }, context);
       response = await requestDownload(redirect, { redirect: 'manual', signal, headers });
     }
     const delay = rateLimitDelay(response);
@@ -1649,8 +1722,8 @@ async function runDownload(args, context) {
       await assertSourceMatchesPlan(plan, sourceInfo, context);
     }
     // Recheck the current cache before appending a validated prefix; final SHA remains mandatory.
-    if (!fs.existsSync(installerPath)) writePrivateFileExclusive(installerPath, Buffer.alloc(0), context.identity, context.tools);
-    if (assertDownloadFile(installerPath, context).size !== offset) fail('invalid_download_cache', 'download cache changed during the request');
+    if (!fs.existsSync(installerPath)) await writePrivateFileExclusive(installerPath, Buffer.alloc(0), context.identity, context.tools);
+    if ((await assertDownloadFile(installerPath, context)).size !== offset) fail('invalid_download_cache', 'download cache changed during the request');
     const descriptor = fs.openSync(installerPath, 'r+');
     try {
       let written = 0;
@@ -1660,7 +1733,7 @@ async function runDownload(args, context) {
     offset += bytes.length;
     if (offset === plan.assets.installer.size) {
       assertFileDigest(installerPath, plan.assets.installer.sha256, 'installer');
-      if (fs.existsSync(urlPath)) { assertDownloadFile(urlPath, context); fs.unlinkSync(urlPath); }
+      if (fs.existsSync(urlPath)) { await assertDownloadFile(urlPath, context); fs.unlinkSync(urlPath); }
     }
     return progress(bytes.length);
   } catch (error) {
@@ -1670,12 +1743,12 @@ async function runDownload(args, context) {
       throw new InstallError('download_storage_failed', `download cache I/O failed: ${redactDiagnostic(error.message)}`, { cause: error });
     }
     throw error;
-  } finally { unlock(); }
+  } finally { await unlock(); }
 }
 
 async function runExecute(args, context) {
   assertReleaseSourceAvailable(args.releaseSource);
-  const loaded = loadApprovedPlan(args, context);
+  const loaded = await loadApprovedPlan(args, context);
   const { plan, resolvedPlan, transactionRoot, source, nativeBytes, nativeSha256 } = loaded;
   const reinstall = plan.schema === REINSTALL_PLAN_SCHEMA;
   if (reinstall && fs.existsSync(path.join(transactionRoot, 'interactive-reinstall-started.json'))) {
@@ -1689,11 +1762,11 @@ async function runExecute(args, context) {
   const installerPath = path.join(transactionRoot, plan.assets.installer.name);
   const checksumPath = path.join(transactionRoot, plan.assets.checksum.name);
   const candidatePath = path.join(transactionRoot, plan.assets.candidate.name);
-  const unlock = acquireDownloadLock(transactionRoot, context);
+  const unlock = await acquireDownloadLock(transactionRoot, context);
   let installerCompleted = false;
   try {
     if (!fs.existsSync(installerPath)) fail('download_required', 'run download until status=downloaded before execute');
-    assertDownloadFile(installerPath, context);
+    await assertDownloadFile(installerPath, context);
     assertFileSize(installerPath, plan.assets.installer.size, 'installer');
     assertFileDigest(installerPath, plan.assets.installer.sha256, 'installer');
     await assertSourceMatchesPlan(plan, source, context);
@@ -1701,7 +1774,7 @@ async function runExecute(args, context) {
       [plan.assets.candidate, candidatePath, MAXIMUM_JSON_BYTES, SMALL_ASSET_TIMEOUT_MILLISECONDS],
       [plan.assets.checksum, checksumPath, MAXIMUM_CHECKSUM_BYTES, SMALL_ASSET_TIMEOUT_MILLISECONDS],
     ]) {
-      if (fs.existsSync(destination)) assertDownloadFile(destination, context);
+      if (fs.existsSync(destination)) await assertDownloadFile(destination, context);
       else await saveAsset(sourceAssetURL(source, asset), destination, maximumBytes, timeoutMilliseconds, source);
       assertFileSize(destination, asset.size, asset.role);
       assertFileDigest(destination, asset.sha256, asset.role);
@@ -1735,10 +1808,10 @@ async function runExecute(args, context) {
       nativePlanPath = path.join(transactionRoot, 'native-install-plan.json');
       if (nativePlanPath === resolvedPlan) fail('invalid_plan', 'outer approval cannot occupy the native child path');
       if (fs.existsSync(nativePlanPath)) {
-        assertDownloadFile(nativePlanPath, context);
+        await assertDownloadFile(nativePlanPath, context);
         assertFileDigest(nativePlanPath, nativeSha256, 'native plan');
-      } else writePrivateFileExclusive(nativePlanPath, nativeBytes, context.identity, context.tools);
-      const reloaded = loadApprovedPlan(args, context);
+      } else await writePrivateFileExclusive(nativePlanPath, nativeBytes, context.identity, context.tools);
+      const reloaded = await loadApprovedPlan(args, context);
       if (reloaded.nativeSha256 !== nativeSha256) fail('plan_digest_mismatch', 'native plan binding changed before installation');
     }
     assertInstallationDestinations(plan);
@@ -1764,7 +1837,7 @@ async function runExecute(args, context) {
     assertRegularPath(application, 'file', 'installed_receipt_invalid');
     assertRegularPath(plan.installation.bootstrapPath, 'file', 'installed_receipt_invalid');
     assertRegularPath(runtime, 'file', 'installed_receipt_invalid');
-    writeDesktopEndpointConfig(plan.installation.bootstrapPath, plan.connection.url, context);
+    await writeDesktopEndpointConfig(plan.installation.bootstrapPath, plan.connection.url, context);
     const launched = childProcess.spawn(application, plan.launchMode === 'agent-background' ? ['--jishudb-agent-background'] : [], {
       detached: true,
       env: sanitizedChildEnvironment(),
@@ -1798,7 +1871,7 @@ async function runExecute(args, context) {
     }
     throw error;
   } finally {
-    unlock();
+    await unlock();
   }
 }
 
@@ -1882,7 +1955,7 @@ async function main(argv = process.argv.slice(2)) {
     const proxyStatus = runWithDownloadProxy(argv);
     if (proxyStatus !== null) return proxyStatus;
     const tools = resolveSystemTools();
-    const identity = getCurrentWindowsIdentity(tools);
+    const identity = await getCurrentWindowsIdentity(tools);
     const tempRoot = assertNoReparseAncestors(os.tmpdir(), 'temporary directory');
     const localAppData = assertNoReparseAncestors(process.env.LOCALAPPDATA ?? '', 'LOCALAPPDATA');
     assertRegularPath(tempRoot, 'directory', 'unsupported_platform');
@@ -1913,6 +1986,8 @@ async function main(argv = process.argv.slice(2)) {
 
 const exported = {
   InstallError,
+  runNative,
+  assertReinstallableApplication,
   runPlan,
   loadApprovedPlan,
   createMirrorEnvelope,

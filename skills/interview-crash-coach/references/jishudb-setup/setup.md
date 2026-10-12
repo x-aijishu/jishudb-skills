@@ -121,6 +121,9 @@ On Windows, run the Node helper's `check` mode as described in the installation
 contract. Continue only when it returns `status=compatible`. The Windows helper
 must not materialize or invoke PowerShell; it uses the packaged JavaScript and
 the fixed Windows `whoami.exe` and `icacls.exe` system tools.
+These captured system-tool calls use asynchronous pipes for host compatibility;
+a native-tool error must retain its operation and OS cause, not be diagnosed as
+missing Node, a database error, or a security-policy denial without evidence.
 
 The Windows helper automatically uses existing `HTTP_PROXY` / `HTTPS_PROXY`
 settings (including lowercase forms). Proxy support requires a Node runtime
