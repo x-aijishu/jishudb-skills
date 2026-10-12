@@ -26,7 +26,7 @@ jobs:
         run: npm test
       - name: Validate Windows helper contracts
         if: runner.os == 'Windows'
-        run: node --test scripts/jishudb-install-windows-helper.test.mjs scripts/windows-download-steps.test.mjs
+        run: node --test scripts/jishudb-install-windows-helper.test.mjs scripts/windows-download-steps.test.mjs scripts/windows-download-proxy.test.mjs
       - name: Check native Windows helper
         if: runner.os == 'Windows'
         shell: pwsh

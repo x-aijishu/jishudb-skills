@@ -184,6 +184,24 @@ Persist the reviewed endpoint at
 
 ### Windows x64
 
+The helper recognizes existing HTTP/HTTPS proxy environment variables, preferring
+lowercase forms when both are set. It validates HTTP(S) proxy URLs without
+printing credentials and re-executes the same Node helper once with
+`--use-env-proxy` before any network request. This initializes Node's fetch
+proxy dispatcher at startup; setting an environment variable after fetch has
+initialized is not treated as sufficient. Proxy-capable Node (22.21+ or 24.5+)
+is required only when a proxy is configured. Unsupported runtimes return
+`unsupported_proxy_runtime`; invalid proxy URLs return `invalid_proxy_configuration`.
+
+The child-only environment retains the user's NO_PROXY exclusions and adds
+localhost, 127.0.0.1 and IPv6 loopback. API metadata, sidecars and installer ranges
+all use this same proxy-enabled process. No configured proxy keeps the default
+network path; proxy failure never triggers a direct fallback. Proxy credentials
+stay in environment variables, not arguments, plans, logs or client entries.
+The existing sanitized installer/Desktop launch environment remains unchanged.
+The helper does not read system/PAC proxy settings, change OS settings, or
+disable TLS verification.
+
 After approval, call `download` with the approved plan path and digest in separate
 host invocations (allow at least 120 seconds each). Each call requests at most
 16 MiB with a 20-second transfer deadline. Only an exact HTTP 206 Content-Range,

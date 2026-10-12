@@ -1335,6 +1335,7 @@ async function runExecute(args, context) {
 function redactDiagnostic(value) {
   return String(value)
     .replace(/([?&][A-Za-z0-9_.~-]{1,64}=)[^&\s]*/g, '$1<redacted>')
+    .replace(/\b(https?:\/\/)[^/\s@]+@/gi, '$1<redacted>@')
     .replace(/\b(Bearer)\s+[^\s]+/gi, '$1 <redacted>');
 }
 
@@ -1348,10 +1349,67 @@ function sanitizedChildEnvironment(source = process.env) {
   return environment;
 }
 
+/** Build a child-only proxy environment without changing host or system settings. */
+function downloadProxyEnvironment(source = process.env) {
+  const values = {};
+  for (const name of ['HTTP_PROXY', 'HTTPS_PROXY']) {
+    const raw = source[name.toLowerCase()] || source[name];
+    if (!raw) continue;
+    let parsed;
+    try {
+      if (typeof raw !== 'string') throw new TypeError('proxy URL must be text');
+      parsed = new URL(raw);
+      decodeURIComponent(parsed.username);
+      decodeURIComponent(parsed.password);
+    } catch { fail('invalid_proxy_configuration', `${name} must contain a valid HTTP or HTTPS proxy URL`); }
+    if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname
+        || parsed.hash || parsed.search || parsed.pathname !== '/' || /[\u0000-\u0020\u007f]/.test(raw)) {
+      fail('invalid_proxy_configuration', `${name} must be an HTTP or HTTPS proxy URL without a path, query, fragment, or whitespace`);
+    }
+    values[name] = raw;
+  }
+  if (Object.keys(values).length === 0) return null;
+  const exclusions = new Set((source.no_proxy || source.NO_PROXY || '').split(',').map(value => value.trim()).filter(Boolean));
+  for (const host of ['localhost', '127.0.0.1', '::1', '[::1]']) exclusions.add(host);
+  const environment = { ...source };
+  for (const key of Object.keys(environment)) {
+    if (['http_proxy', 'https_proxy', 'no_proxy', 'node_use_env_proxy'].includes(key.toLowerCase())) delete environment[key];
+  }
+  return { ...environment, ...values, NO_PROXY: [...exclusions].join(','), NODE_USE_ENV_PROXY: '1' };
+}
+
+/** Restart this helper once so Node initializes fetch's proxy dispatcher at startup. */
+function runWithDownloadProxy(argv, runtime = process, spawnSync = childProcess.spawnSync) {
+  const environment = downloadProxyEnvironment(runtime.env);
+  if (!environment) return null;
+  if (!runtime.allowedNodeEnvironmentFlags.has('--use-env-proxy')) {
+    fail('unsupported_proxy_runtime', 'configured download proxies require Node.js 22.21+ or 24.5+ with --use-env-proxy support');
+  }
+  const ready = runtime.execArgv.includes('--use-env-proxy')
+    && runtime.env.NODE_USE_ENV_PROXY === '1'
+    && ['HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY'].every(key => runtime.env[key] === environment[key])
+    && !Object.keys(runtime.env).some(key => ['http_proxy', 'https_proxy', 'no_proxy'].includes(key));
+  if (ready) return null;
+  // AI-generated: proxy credentials travel only in the child environment, never argv or output.
+  const flags = runtime.execArgv.filter(flag => !['--use-env-proxy', '--no-use-env-proxy'].includes(flag));
+  const child = spawnSync(runtime.execPath, [...flags, '--use-env-proxy', runtime.argv[1], ...argv], {
+    env: environment,
+    stdio: 'inherit',
+    windowsHide: true,
+    shell: false,
+  });
+  if (child.error) throw new InstallError('proxy_helper_launch_failed', 'could not start the proxy-enabled download helper', { cause: child.error });
+  if (child.signal) fail('proxy_helper_interrupted', `proxy-enabled download helper was interrupted by ${child.signal}`);
+  if (!Number.isInteger(child.status)) fail('proxy_helper_launch_failed', 'proxy-enabled download helper returned no exit status');
+  return child.status;
+}
+
 async function main(argv = process.argv.slice(2)) {
   try {
     const args = parseArguments(argv);
     assertWindowsX64();
+    const proxyStatus = runWithDownloadProxy(argv);
+    if (proxyStatus !== null) return proxyStatus;
     const tools = resolveSystemTools();
     const identity = getCurrentWindowsIdentity(tools);
     const tempRoot = assertNoReparseAncestors(os.tmpdir(), 'temporary directory');
@@ -1383,6 +1441,10 @@ async function main(argv = process.argv.slice(2)) {
 
 const exported = {
   InstallError,
+  downloadProxyEnvironment,
+  runWithDownloadProxy,
+  fetchWithTimeout,
+  requestDownload,
   validateRangeResponse,
   readDownloadRange,
   rateLimitDelay,

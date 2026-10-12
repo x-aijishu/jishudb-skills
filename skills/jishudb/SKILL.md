@@ -15,7 +15,7 @@ compatibility: >-
   the user's local machine.
 metadata:
   author: jishudb
-  version: "0.1.16"
+  version: "0.1.17"
   openclaw:
     homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/jishudb
 ---
@@ -91,7 +91,8 @@ setup is `BLOCKED`. Neither state permits the calling task to skip JishuDB.
    remote service. Use `jishudb mcp serve` only for an explicit standalone or
    headless data owner with an exact approved non-Desktop `JISHUDB_DATA`.
 7. Report a stdio-only Desktop or remote client as `BLOCKED`. Do not stop
-   Desktop, open its SQLite data, or install a proxy.
+   Desktop, open its SQLite data, or install an MCP transport-bridge proxy.
+   This does not prohibit an existing HTTP/HTTPS download proxy.
 
 ### Recover an unavailable connection
 
@@ -117,6 +118,15 @@ On Windows, run the Node helper's `check` mode as described in the installation
 contract. Continue only when it returns `status=compatible`. The Windows helper
 must not materialize or invoke PowerShell; it uses the packaged JavaScript and
 the fixed Windows `whoami.exe` and `icacls.exe` system tools.
+
+The Windows helper automatically uses existing `HTTP_PROXY` / `HTTPS_PROXY`
+settings (including lowercase forms). Proxy support requires a Node runtime
+supporting `--use-env-proxy` (Node 22.21+ or 24.5+). It applies the configuration
+only to its download process and preserves `NO_PROXY` plus local loopback
+exclusions. No proxy settings means the default network behavior. Reuse the
+inherited configuration; do not change system proxy settings or silently bypass
+a configured proxy when it fails. System/PAC-only and SOCKS proxy discovery are
+not implemented; do not claim the helper inherits them automatically.
 
 Then run the helper in `plan` mode. The plan is read-only for product,
 installation, client, and release state and may create only private ephemeral
