@@ -8,6 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import vm from 'node:vm';
+import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const catalog = require('../skills/jishudb/scripts/release-mirror-catalog.cjs');
@@ -53,6 +54,7 @@ async function harness(t, options = {}) {
   const calls = [];
   const requests = [];
   const launches = [];
+  const interactiveLaunches = [];
   let handler;
   const server = http.createServer((req, res) => {
     requests.push({ url: req.url, headers: req.headers });
@@ -92,7 +94,10 @@ async function harness(t, options = {}) {
         }
         return { status: 0 };
       },
-      spawn() { const emitter = new EventEmitter(); emitter.unref = () => {}; queueMicrotask(() => emitter.emit('spawn')); return emitter; },
+      spawn(command, args) {
+        if (command.endsWith('Setup.exe')) interactiveLaunches.push({ command, args });
+        const emitter = new EventEmitter(); emitter.unref = () => {}; queueMicrotask(() => emitter.emit('spawn')); return emitter;
+      },
     };
     return process.getBuiltinModule(name);
   };
@@ -122,7 +127,7 @@ async function harness(t, options = {}) {
   `, context);
   const helper = context.module.exports;
   const environment = { identity: { sid: 'S-1-5-21-1-2-3-1001' }, localAppData, tempRoot: root, tools: {} };
-  return { ...f, helper, environment, context, root, calls, requests, launches, setHandler: fn => { handler = fn; },
+  return { ...f, helper, environment, context, root, calls, requests, launches, interactiveLaunches, setHandler: fn => { handler = fn; },
     plan: () => helper.runPlan({ releaseSource: 'cnb', planPath: '', client: 'WorkBuddy', configTarget: path.join(root, 'client.json'), connectionName: 'jishudb' }, environment) };
 }
 
@@ -254,11 +259,123 @@ test('expiry reached during execute metadata work cannot renew approval or launc
 
 test('production loader uses the packaged authority, never a key carried by the catalog', () => {
   const runtime = Object.create(process);
-  runtime.argv = [process.execPath, new URL('../skills/jishudb/scripts/install-windows.js', import.meta.url).pathname];
+  runtime.argv = [process.execPath, fileURLToPath(new URL('../skills/jishudb/scripts/install-windows.js', import.meta.url))];
   const sandbox = vm.createContext({ module: { exports: {} }, process: runtime, Buffer, URL });
   vm.runInContext(helperText.replace(/^#![^\n]*\n/, ''), sandbox);
   // The fixture has a valid signature under its own key, but that key is not
   // the independently approved production key shipped alongside the helper.
   assert.throws(() => sandbox.module.exports.verifyMirrorCatalog(fixture().bytes(), {}, { approved: true }),
     error => error.category === 'catalog_signature_invalid');
+});
+
+function retainedDataFixture(h) {
+  const stateRoot = path.join(h.environment.localAppData, 'JishuDB');
+  const dataRoot = path.join(h.root, 'custom-retained-data');
+  const bootstrapPath = path.join(stateRoot, 'data-location.json');
+  const markerPath = path.join(dataRoot, '.jishudb-data-root');
+  const endpointPath = path.join(stateRoot, 'desktop-endpoint.json');
+  fs.mkdirSync(stateRoot, { recursive: true });
+  fs.mkdirSync(dataRoot);
+  const identity = { schemaVersion: 1, product: 'JishuDB', instanceId: 'a'.repeat(32) };
+  fs.writeFileSync(bootstrapPath, JSON.stringify({ ...identity, dataRoot }));
+  fs.writeFileSync(markerPath, JSON.stringify(identity));
+  fs.writeFileSync(endpointPath, '{"localPort":8093,"schemaVersion":1}\n');
+  const database = path.join(dataRoot, 'database'); fs.mkdirSync(database);
+  const sentinel = path.join(database, 'kb.sqlite'); fs.writeFileSync(sentinel, 'existing data must survive');
+  return { dataRoot, bootstrapPath, markerPath, endpointPath, sentinel };
+}
+
+test('retained data selects an explicit interactive reinstall and preserves its custom path and identity', async t => {
+  const h = await harness(t);
+  const retained = retainedDataFixture(h);
+  const snapshots = new Map(Object.values(retained).filter(p => fs.statSync(p).isFile()).map(p => [p, fs.readFileSync(p)]));
+  const approval = await h.plan();
+  assert.equal(approval.approval.operation, 'reinstall-preserve-data');
+  assert.equal(approval.approval.launchMode, 'interactive-installer');
+  assert.equal(approval.approval.dataRoot, retained.dataRoot);
+  assert.equal(approval.approval.mcpUrl, 'http://127.0.0.1:8093/mcp');
+  assert.equal((await h.helper.runDownload(args(approval), h.environment)).status, 'downloaded');
+  const result = await h.helper.runExecute(args(approval), h.environment);
+  assert.equal(result.status, 'user_action_required');
+  assert.equal(result.next, 'complete_interactive_reinstall_and_verify_existing_data');
+  assert.equal(h.launches.length, 0, 'fresh-only silent installer must never run');
+  assert.equal(h.interactiveLaunches.length, 1);
+  assert.deepEqual(Array.from(h.interactiveLaunches[0].args), [], 'ordinary installer pages retain directory confirmation');
+  for (const [p, bytes] of snapshots) assert.deepEqual(fs.readFileSync(p), bytes);
+  await assert.rejects(h.helper.runExecute(args(approval), h.environment), e => e.category === 'installer_already_started');
+  assert.equal(h.interactiveLaunches.length, 1);
+});
+
+for (const change of ['dataRoot', 'instanceId', 'bootstrapBytes', 'application']) {
+  test(`retained ${change} change does not prevent download and stops installation`, async t => {
+    const h = await harness(t); const retained = retainedDataFixture(h);
+    const approval = await h.plan();
+    if (change === 'application') fs.mkdirSync(approval.approval.applicationRoot, { recursive: true });
+    else if (change === 'bootstrapBytes') fs.appendFileSync(retained.bootstrapPath, '\n');
+    else if (change === 'dataRoot') fs.rmSync(retained.markerPath);
+    else {
+      const marker = JSON.parse(fs.readFileSync(retained.markerPath)); marker.instanceId = 'b'.repeat(32);
+      fs.writeFileSync(retained.markerPath, JSON.stringify(marker));
+    }
+    assert.equal((await h.helper.runDownload(args(approval), h.environment)).status, 'downloaded');
+    await assert.rejects(h.helper.runExecute(args(approval), h.environment), e =>
+      ['existing_installation', 'invalid_data_location', 'installation_state_changed'].includes(e.category));
+    assert.equal(h.launches.length + h.interactiveLaunches.length, 0);
+    assert.equal(fs.readFileSync(retained.sentinel, 'utf8'), 'existing data must survive');
+  });
+}
+
+test('invalid leftover endpoint is reported during planning without blocking verified download', async t => {
+  const h = await harness(t);
+  const endpoint = path.join(h.environment.localAppData, 'JishuDB/desktop-endpoint.json');
+  fs.mkdirSync(path.dirname(endpoint)); fs.writeFileSync(endpoint, '{');
+  const approval = await h.plan();
+  assert.equal(approval.approval.preflightWarnings[0].errorCategory, 'invalid_endpoint');
+  assert.equal((await h.helper.runDownload(args(approval), h.environment)).status, 'downloaded');
+  await assert.rejects(h.helper.runExecute(args(approval), h.environment), e => e.category === 'invalid_endpoint');
+  assert.equal(fs.readFileSync(endpoint, 'utf8'), '{');
+  assert.equal(h.launches.length + h.interactiveLaunches.length, 0);
+});
+
+test('existing application and orphaned data do not block download or authorize overwriting', async t => {
+  for (const target of ['Programs/JishuDB', 'Programs/JishuDBData', 'JishuDB/data-location.json']) {
+    const h = await harness(t); const filename = path.join(h.environment.localAppData, target);
+    fs.mkdirSync(path.dirname(filename), { recursive: true });
+    if (target.endsWith('.json')) fs.writeFileSync(filename, '{}'); else fs.mkdirSync(filename);
+    const approval = await h.plan();
+    assert.equal((await h.helper.runDownload(args(approval), h.environment)).status, 'downloaded');
+    await assert.rejects(h.helper.runExecute(args(approval), h.environment), e =>
+      ['existing_installation', 'retained_data_requires_review'].includes(e.category));
+    assert.ok(fs.existsSync(filename));
+    assert.equal(h.launches.length + h.interactiveLaunches.length, 0);
+  }
+});
+
+test('an occupied retained endpoint allows download but blocks the reinstall wizard', async t => {
+  const h = await harness(t); retainedDataFixture(h);
+  vm.runInContext('isTcpPortAvailable = async () => false', h.context);
+  const approval = await h.plan();
+  assert.equal(approval.approval.mcpUrl, 'http://127.0.0.1:8093/mcp');
+  assert.equal((await h.helper.runDownload(args(approval), h.environment)).status, 'downloaded');
+  await assert.rejects(h.helper.runExecute(args(approval), h.environment), e => e.category === 'endpoint_conflict');
+  assert.equal(h.interactiveLaunches.length, 0);
+});
+
+test('retained data without an endpoint uses the same legacy port as Desktop', async t => {
+  const h = await harness(t); const retained = retainedDataFixture(h);
+  fs.unlinkSync(retained.endpointPath);
+  vm.runInContext("getFreeDesktopMcpUrl = async () => 'http://127.0.0.1:8090/mcp'", h.context);
+  const approval = await h.plan();
+  assert.equal(approval.approval.mcpUrl, 'http://127.0.0.1:8088/mcp');
+  assert.equal((await h.helper.runDownload(args(approval), h.environment)).status, 'downloaded');
+  assert.equal((await h.helper.runExecute(args(approval), h.environment)).status, 'user_action_required');
+  assert.equal(fs.existsSync(retained.endpointPath), false);
+});
+
+test('removing a retained custom endpoint after approval cannot silently switch the planned port', async t => {
+  const h = await harness(t); const retained = retainedDataFixture(h);
+  const approval = await h.plan(); fs.unlinkSync(retained.endpointPath);
+  assert.equal((await h.helper.runDownload(args(approval), h.environment)).status, 'downloaded');
+  await assert.rejects(h.helper.runExecute(args(approval), h.environment), e => e.category === 'endpoint_conflict');
+  assert.equal(h.interactiveLaunches.length, 0);
 });

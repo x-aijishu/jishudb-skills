@@ -314,11 +314,59 @@ Write the reviewed endpoint beside `data-location.json` as
 streaming SHA-256 validation, argument-array process launch, and Windows-native
 SID/ACL tools; PowerShell and its execution policy are not prerequisites.
 
+`desktop-endpoint.json` stores a reusable port preference. `data-location.json`
+stores the data directory and instance identity. Neither file alone proves that
+the application is installed. Planning reuses a valid endpoint and resolves
+retained data through the bootstrap and matching `.jishudb-data-root` marker.
+Endpoint and data-inspection problems appear as `preflightWarnings`; they do
+not prohibit release discovery or verified download. Download validates the
+approved release and bytes without requiring an empty product directory or a
+free port. Execute enforces the current path, ownership and port checks before
+starting an installer. It never deletes or silently overwrites saved preferences.
+
+Valid retained data selects `jishudb-agent-reinstall-plan-v1` with
+`operation=reinstall-preserve-data`, `launchMode=interactive-installer`, the
+existing data directory, and `retainedData` containing the instance ID plus
+SHA-256 digests of the bootstrap and root marker. The same private-plan,
+current-user, expiry, immutable-release, catalog and asset checks apply. This
+helper-only plan is never passed to the native `/JISHUDB_AGENT_PLAN` parser:
+released Windows installers accept only absent destinations on that silent path.
+
+Reinstall execute requires the application directory to be absent and verifies
+that the retained location/ownership still matches approval. It starts the
+already verified installer in its ordinary interactive mode and returns `user_action_required` with
+`next=complete_interactive_reinstall_and_verify_existing_data`. The native
+installer reads the retained bootstrap and validates data ownership. The user
+confirms the approved application directory, keeps the existing data directory
+selected, and completes the native pages. An exclusive
+transaction receipt prevents a repeated execute from starting another installer.
+Cancellation or launch failure requires inspection before another approved
+attempt; never fall back to silent fresh installation or claim completion.
+After user completion, verify the installed version/revision, bootstrap,
+original data directory and instance identity, then continue normal health and
+client checks. A directory without a valid bootstrap or matching marker needs
+explicit recovery; the helper never guesses a database location.
+
+Execute rechecks destinations and endpoint compatibility before starting NSIS
+and checks the saved endpoint again before launch. If NSIS has already succeeded
+but receipt verification or launch fails, the error includes
+`installation.status=installer_completed` and
+`installation.next=verify_existing_installation_before_launch`, retaining the
+original error category. Do not repeat `execute` or reinstall over these files.
+Verify the installed version/revision, runtime and data bootstrap against the
+approved release, check the endpoint and process state, then continue the
+previously approved launch of that exact application. An expired installation
+plan never authorizes rerunning NSIS or overwriting existing state. Process
+launch is not MCP readiness; continue the normal health, OAuth and host-tool
+discovery checks, leaving human consent to the user.
+
 ## Stop conditions
 
 Stop without retry or fallback when any trust input, plan field, digest,
-candidate field, redirect, source-revision binding, release re-fetch, installation
-receipt, or endpoint identity is invalid or ambiguous. Never overwrite an
+candidate field, redirect, source-revision binding or release re-fetch is invalid
+or ambiguous. Product-state inspection warnings do not block verified download,
+but invalid installation receipts or endpoint/data identity block execution.
+Never overwrite an
 existing app, upgrade, select a different data directory, delete partial product
 state, weaken OS security, or offer a manual unverified download under the old
 approval.

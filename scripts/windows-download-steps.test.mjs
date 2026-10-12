@@ -19,7 +19,10 @@ function harness(t, bytes, network) {
     url: `https://api.github.com/repos/x-aijishu/jishudb-desktop-releases/releases/assets/${index + 1}`,
   }]));
   const plan = { assets, release: { id: 1, tag: 'v0.9.8', targetCommitish: 'main' }, expiresAt: new Date(Date.now() + 1800000).toISOString(),
-    connection: { url: 'http://127.0.0.1:8088/mcp' }, installation: { applicationRoot: path.join(root, 'app'), dataRoot: path.join(root, 'data') } };
+    connection: { url: 'http://127.0.0.1:8088/mcp' }, installation: {
+      applicationRoot: path.join(root, 'app'), dataRoot: path.join(root, 'data'),
+      bootstrapPath: path.join(root, 'state', 'data-location.json'),
+    } };
   const release = { id: 1, immutable: true, draft: false, prerelease: false, tag_name: 'v0.9.8', target_commitish: 'main',
     assets: Object.values(assets).map(a => ({ ...a, state: 'uploaded', digest: `sha256:${a.sha256}` })) };
   const calls = [];

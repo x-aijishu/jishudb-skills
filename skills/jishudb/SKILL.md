@@ -15,7 +15,7 @@ compatibility: >-
   the user's local machine.
 metadata:
   author: jishudb
-  version: "0.1.17"
+  version: "0.1.18"
   openclaw:
     homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/jishudb
 ---
@@ -82,6 +82,10 @@ setup is `BLOCKED`. Neither state permits the calling task to skip JishuDB.
    one integer `localPort`, and a loopback HTTP endpoint. If the file is absent
    for an existing pre-migration installation, try only the legacy `8088`
    endpoint; do not scan arbitrary ports.
+   This file is a reusable port preference, not proof that Desktop is installed.
+   On Windows, `data-location.json` separately identifies the retained data
+   directory and instance. Preserve both files; distinguish an installed app,
+   retained data after uninstall, and endpoint preferences alone.
 4. Probe the resolved sibling `/health` without credentials and accept it only
    when `product`, `healthSchema`, and `status` identify JishuDB. Do not follow
    redirects.
@@ -145,6 +149,14 @@ evidence. It must resolve the exact release, asset digests, source revision,
 application/data destinations, client, configuration target, connection name,
 MCP URL, and default read-only profile.
 
+On Windows, valid endpoint preferences are reused. A valid `data-location.json`
+and matching data-root ownership marker select `operation=reinstall-preserve-data`
+with the existing directory, including a custom directory. The plan explicitly
+approves an interactive reinstall rather than the installer's fresh-only silent
+Agent path. Existing files and `preflightWarnings` do not prohibit a verified
+download; resolve execution warnings before installing. An already installed
+application should be started or repaired, not overwritten by a fresh install.
+
 Explain that supported fresh Agent onboarding also prepares the default local
 embedding model after browser consent. The consent page specifies the model,
 transfer/disk requirements and trusted sources; eligible network failures fall
@@ -171,6 +183,16 @@ before another download call; never create a new plan to evade rate limits.
 On `downloaded`, call `execute` with that plan; it rechecks the whole asset and
 installs without downloading the installer again. On both platforms, `execute`
 requires the complete verified download; never use it as a download command.
+
+For Windows `reinstall-preserve-data`, `execute` opens that same verified
+installer and returns `status=user_action_required`. Confirm the approved
+application directory and keep the existing data directory selected in its
+ordinary installer pages. Do not invoke `execute`
+again while waiting, automate confirmation, add `/S`, delete the JSON files, or
+move/delete retained data to make the fresh-install check pass. After the user
+finishes, verify the installed version/revision, the original data directory and
+instance identity, and the endpoint before continuing connection setup. This
+handoff is not an installation-complete or MCP-ready result.
 
 A failed result includes `stage` and `errorCategory`. Preserve them; an outer
 host kill or timeout alone does not prove OS/sandbox denial or a completed

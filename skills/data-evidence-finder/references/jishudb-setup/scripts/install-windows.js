@@ -18,11 +18,13 @@ const ASSET_REDIRECT_PREFIX = '/github-production-release-asset/1316997274/';
 const PLAN_SCHEMA = 'jishudb-agent-install-plan-v1';
 // AI-generated: versioned presentation intent is bound by the reviewed plan digest.
 const BACKGROUND_PLAN_SCHEMA = 'jishudb-agent-install-plan-v2';
+const REINSTALL_PLAN_SCHEMA = 'jishudb-agent-reinstall-plan-v1';
 const PREFERRED_MCP_PORT = 8088;
 const RESERVED_LAN_MCP_PORT = 8089;
 const DESKTOP_MCP_PORT_SEARCH_LIMIT = 16;
 const ENDPOINT_CONFIG_SCHEMA = 1;
 const ENDPOINT_CONFIG_FILENAME = 'desktop-endpoint.json';
+const MAXIMUM_ENDPOINT_CONFIG_BYTES = 4096;
 const PLAN_TTL_MILLISECONDS = 30 * 60 * 1000;
 const MAXIMUM_RELEASE_PAGES = 5;
 const MAXIMUM_JSON_BYTES = 16 * 1024 * 1024;
@@ -922,7 +924,8 @@ function newAssetPlan(asset, role) {
 }
 
 function assertPlanShape(plan) {
-  requireExactProperties(plan, ['schema', 'createdAt', 'expiresAt', 'operation', 'platform', 'userSid', 'release', 'assets', 'installation', 'connection', 'publisher', ...(plan.schema === BACKGROUND_PLAN_SCHEMA ? ['launchMode'] : [])], 'plan');
+  requireExactProperties(plan, ['schema', 'createdAt', 'expiresAt', 'operation', 'platform', 'userSid', 'release', 'assets', 'installation', 'connection', 'publisher', ...([BACKGROUND_PLAN_SCHEMA, REINSTALL_PLAN_SCHEMA].includes(plan.schema) ? ['launchMode'] : []), ...(plan.schema === REINSTALL_PLAN_SCHEMA ? ['retainedData'] : [])], 'plan');
+  if (plan.schema === REINSTALL_PLAN_SCHEMA) requireExactProperties(plan.retainedData, ['instanceId', 'bootstrapSha256', 'markerSha256'], 'plan.retainedData');
   requireExactProperties(plan.release, ['repository', 'id', 'tag', 'version', 'targetCommitish', 'sourceRepository', 'sourceRevision'], 'plan.release');
   requireExactProperties(plan.assets, ['installer', 'checksum', 'candidate'], 'plan.assets');
   requireExactProperties(plan.installation, ['applicationRoot', 'dataRoot', 'bootstrapPath', 'desktopShortcut', 'dataOwnershipAcknowledged'], 'plan.installation');
@@ -975,6 +978,164 @@ async function getFreeDesktopMcpUrl() {
   fail('endpoint_unavailable', 'no free port exists in the bounded Desktop endpoint set');
 }
 
+/** Read retained endpoint preferences without treating them as an installation. */
+function readSavedDesktopEndpoint(bootstrapPath) {
+  const endpointPath = path.join(path.dirname(bootstrapPath), ENDPOINT_CONFIG_FILENAME);
+  try { fs.lstatSync(endpointPath); }
+  catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw new InstallError('endpoint_inspection_failed', 'could not inspect the saved Desktop endpoint; check file access before installing', { cause: error });
+  }
+  // AI-assisted security boundary: retained preferences must be bounded regular
+  // files, not links or alternative paths. Reuse never grants install authority.
+  const stat = assertRegularPath(endpointPath, 'file', 'invalid_endpoint');
+  if (stat.nlink !== 1 || stat.size <= 0 || stat.size > MAXIMUM_ENDPOINT_CONFIG_BYTES) {
+    fail('invalid_endpoint', 'saved Desktop endpoint must be a single regular file no larger than 4096 bytes');
+  }
+  let contents;
+  try { contents = fs.readFileSync(endpointPath, 'utf8'); }
+  catch (error) {
+    throw new InstallError('endpoint_inspection_failed', 'could not read the saved Desktop endpoint; check file access before installing', { cause: error });
+  }
+  let saved;
+  try { saved = JSON.parse(contents); }
+  catch (error) {
+    throw new InstallError('invalid_endpoint', 'saved Desktop endpoint is not valid JSON; inspect it before installing', { cause: error });
+  }
+  if (!isRecord(saved) || Object.keys(saved).sort().join(',') !== 'localPort,schemaVersion'
+      || saved.schemaVersion !== ENDPOINT_CONFIG_SCHEMA || !Number.isInteger(saved.localPort)
+      || !approvedDesktopMcpPorts().includes(saved.localPort)) {
+    fail('invalid_endpoint', 'saved Desktop endpoint has an unsupported schema or port; inspect it before installing');
+  }
+  return { endpointPath, mcpUrl: `http://127.0.0.1:${saved.localPort}/mcp` };
+}
+
+/** Choose an approved endpoint while preserving valid preferences after uninstall. */
+async function selectInstallationEndpoint(bootstrapPath, { preserveData = false } = {}) {
+  const saved = readSavedDesktopEndpoint(bootstrapPath);
+  // Desktop retains the legacy port for an existing data directory when no
+  // endpoint preference exists; the interactive installer must agree with it.
+  if (!saved) return preserveData ? `http://127.0.0.1:${PREFERRED_MCP_PORT}/mcp` : getFreeDesktopMcpUrl();
+  return saved.mcpUrl;
+}
+
+function readInstallationMetadata(filename) {
+  const stat = assertRegularPath(filename, 'file', 'invalid_data_location');
+  if (stat.nlink !== 1 || stat.size <= 0 || stat.size > MAXIMUM_ENDPOINT_CONFIG_BYTES) {
+    fail('invalid_data_location', 'data-location metadata must be a small regular, non-linked file');
+  }
+  let bytes;
+  try { bytes = fs.readFileSync(filename); }
+  catch (error) { throw new InstallError('installation_inspection_failed', 'could not read retained data-location metadata', { cause: error }); }
+  try { return { value: JSON.parse(bytes.toString('utf8')), sha256: sha256Bytes(bytes) }; }
+  catch (error) { throw new InstallError('invalid_data_location', 'retained data-location metadata is not valid JSON', { cause: error }); }
+}
+
+/** Resolve the existing data owner; never infer a database from an endpoint file. */
+function readRetainedInstallation(installation) {
+  try { fs.lstatSync(installation.bootstrapPath); }
+  catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw new InstallError('installation_inspection_failed', 'could not inspect the retained data location', { cause: error });
+  }
+  const bootstrap = readInstallationMetadata(installation.bootstrapPath);
+  const value = bootstrap.value;
+  if (!isRecord(value) || Object.keys(value).sort().join(',') !== 'dataRoot,instanceId,product,schemaVersion'
+      || value.schemaVersion !== 1 || value.product !== 'JishuDB' || !/^[0-9a-f]{32}$/.test(value.instanceId)
+      || typeof value.dataRoot !== 'string' || !path.isAbsolute(value.dataRoot)) {
+    fail('invalid_data_location', 'retained data location has an unsupported identity or path');
+  }
+  const dataRoot = assertNoReparseAncestors(value.dataRoot, 'retained data directory');
+  if (dataRoot.toLowerCase() !== value.dataRoot.toLowerCase()) fail('invalid_data_location', 'retained data directory is not canonical');
+  const contains = (parent, child) => {
+    const relative = path.relative(parent, child);
+    return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
+  };
+  if (contains(installation.applicationRoot, dataRoot) || contains(dataRoot, installation.applicationRoot)) {
+    fail('invalid_data_location', 'retained data and application directories must not overlap');
+  }
+  assertRegularPath(dataRoot, 'directory', 'invalid_data_location');
+  const marker = readInstallationMetadata(path.join(dataRoot, '.jishudb-data-root'));
+  if (!isRecord(marker.value) || Object.keys(marker.value).sort().join(',') !== 'instanceId,product,schemaVersion'
+      || marker.value.schemaVersion !== 1 || marker.value.product !== 'JishuDB' || marker.value.instanceId !== value.instanceId) {
+    fail('invalid_data_location', 'retained data directory ownership does not match data-location.json');
+  }
+  return { dataRoot, retainedData: { instanceId: value.instanceId, bootstrapSha256: bootstrap.sha256, markerSha256: marker.sha256 } };
+}
+
+function assertReinstallationDestinations(plan) {
+  assertNoReparseAncestors(plan.installation.applicationRoot, 'application directory');
+  try { fs.lstatSync(plan.installation.applicationRoot); }
+  catch (error) {
+    if (error.code !== 'ENOENT') throw new InstallError('installation_inspection_failed', 'could not inspect the application directory', { cause: error });
+    const current = readRetainedInstallation(plan.installation);
+    if (!current || current.dataRoot !== plan.installation.dataRoot
+        || Object.keys(plan.retainedData).some(key => current.retainedData[key] !== plan.retainedData[key])) {
+      fail('installation_state_changed', 'retained data location or ownership changed after approval; inspect it and create a new plan');
+    }
+    const endpoint = readSavedDesktopEndpoint(plan.installation.bootstrapPath);
+    const actualURL = endpoint?.mcpUrl ?? `http://127.0.0.1:${PREFERRED_MCP_PORT}/mcp`;
+    if (plan.connection && actualURL !== plan.connection.url) {
+      fail('endpoint_conflict', 'retained Desktop endpoint changed after approval; create a new plan without overwriting configuration');
+    }
+    return;
+  }
+  fail('existing_installation', 'application files already exist; verify and start the existing Desktop instead of reinstalling');
+}
+
+function assertDesktopEndpointCompatible(bootstrapPath, mcpUrl) {
+  if (!isDesktopMcpUrl(mcpUrl)) fail('invalid_endpoint', 'approved Desktop MCP endpoint is invalid');
+  const saved = readSavedDesktopEndpoint(bootstrapPath);
+  if (saved && saved.mcpUrl !== mcpUrl) {
+    fail('endpoint_conflict', 'saved Desktop endpoint differs from the approved plan; create a new plan without deleting existing data');
+  }
+  return saved;
+}
+
+function assertFreshInstallationDestinations(installation) {
+  for (const target of [installation.applicationRoot, installation.dataRoot, installation.bootstrapPath]) {
+    try { fs.lstatSync(target); }
+    catch (error) {
+      if (error.code === 'ENOENT') continue;
+      throw new InstallError('installation_inspection_failed', 'could not inspect an installation destination; check file access before installing', { cause: error });
+    }
+    if (target === installation.applicationRoot) fail('existing_installation', 'application files already exist; verify and start the existing Desktop');
+    fail('retained_data_requires_review', 'data or data-location state exists; preserve it and create a reviewed data-preserving reinstall plan');
+  }
+}
+
+function assertInstallationDestinations(plan) {
+  if (plan.schema === REINSTALL_PLAN_SCHEMA) assertReinstallationDestinations(plan);
+  else assertFreshInstallationDestinations(plan.installation);
+}
+
+/** Hand retained data to the existing interactive installer, never its fresh-only Agent entrypoint. */
+async function launchInteractiveReinstallation(installerPath, plan, loaded, context) {
+  const receiptPath = path.join(loaded.transactionRoot, 'interactive-reinstall-started.json');
+  // AI-assisted: a private, exclusive receipt prevents repeated execute from
+  // launching another installer. The exact approved data identity is rechecked
+  // by the caller; the native installer retains its own ownership validation.
+  writePrivateFileExclusive(receiptPath, `${JSON.stringify({
+    schemaVersion: 1, planSha256: loaded.approvalSha256, version: plan.release.version,
+    dataRoot: plan.installation.dataRoot, instanceId: plan.retainedData.instanceId,
+    status: 'launch_requested',
+  }, null, 2)}\n`, context.identity, context.tools);
+  try {
+    const installer = childProcess.spawn(installerPath, [], {
+      detached: true, env: sanitizedChildEnvironment(), stdio: 'ignore', windowsHide: false, shell: false,
+    });
+    await new Promise((resolve, reject) => { installer.once('spawn', resolve); installer.once('error', reject); });
+    installer.unref();
+  } catch (error) {
+    throw new InstallError('installer_launch_failed', 'could not start the verified reinstall wizard; inspect the launch attempt before retrying', { cause: error });
+  }
+  return {
+    status: 'user_action_required', operation: plan.operation, version: plan.release.version,
+    applicationRoot: plan.installation.applicationRoot, dataRoot: plan.installation.dataRoot,
+    mcpUrl: plan.connection.url, next: 'complete_interactive_reinstall_and_verify_existing_data',
+  };
+}
+
 function removeFileQuietly(target) {
   if (!target) return;
   try {
@@ -1025,6 +1186,25 @@ async function runPlan(args, context) {
   }
   if (!CONNECTION_NAME_PATTERN.test(args.connectionName)) fail('invalid_arguments', 'ConnectionName must be filesystem-safe');
 
+  const localAppData = context.localAppData;
+  const applicationRoot = path.join(localAppData, 'Programs', 'JishuDB');
+  let dataRoot = path.join(localAppData, 'Programs', 'JishuDBData');
+  const bootstrapPath = path.join(localAppData, 'JishuDB', 'data-location.json');
+  // Planning and downloading do not authorize product writes. Inspection issues
+  // are reported now and enforced before execute, without blocking downloads.
+  const preflightWarnings = [];
+  const inspect = async operation => {
+    try { return await operation(); }
+    catch (error) {
+      if (!(error instanceof InstallError)) throw error;
+      preflightWarnings.push({ errorCategory: error.category, message: error.publicMessage });
+      return null;
+    }
+  };
+  const retained = await inspect(() => readRetainedInstallation({ applicationRoot, dataRoot, bootstrapPath }));
+  if (retained) dataRoot = retained.dataRoot;
+  const mcpUrl = await inspect(() => selectInstallationEndpoint(bootstrapPath, { preserveData: !!retained })) ?? `http://127.0.0.1:${PREFERRED_MCP_PORT}/mcp`;
+
   const evidenceRoot = path.join(context.tempRoot, `JishuDBAgentEvidence-${crypto.randomUUID().replaceAll('-', '')}`);
   let targetPlanPath = '';
   let targetPlanParent = '';
@@ -1071,18 +1251,14 @@ async function runPlan(args, context) {
       createPrivateDirectory(targetPlanParent, context.identity, context.tools);
     }
 
-    const localAppData = context.localAppData;
-    const applicationRoot = path.join(localAppData, 'Programs', 'JishuDB');
-    const dataRoot = path.join(localAppData, 'Programs', 'JishuDBData');
-    const bootstrapPath = path.join(localAppData, 'JishuDB', 'data-location.json');
-    const mcpUrl = await getFreeDesktopMcpUrl();
     const now = new Date();
     const plan = {
-      schema: candidate.agentBackgroundLaunch === 1 ? BACKGROUND_PLAN_SCHEMA : PLAN_SCHEMA,
-      ...(candidate.agentBackgroundLaunch === 1 ? {launchMode: 'agent-background'} : {}),
+      schema: retained ? REINSTALL_PLAN_SCHEMA : candidate.agentBackgroundLaunch === 1 ? BACKGROUND_PLAN_SCHEMA : PLAN_SCHEMA,
+      ...(retained ? { launchMode: 'interactive-installer', retainedData: retained.retainedData }
+        : candidate.agentBackgroundLaunch === 1 ? {launchMode: 'agent-background'} : {}),
       createdAt: now.toISOString(),
       expiresAt: new Date(Math.min(now.getTime() + PLAN_TTL_MILLISECONDS, source ? Date.parse(source.verified.payload.expiresAt) : Infinity)).toISOString(),
-      operation: 'fresh-install',
+      operation: retained ? 'reinstall-preserve-data' : 'fresh-install',
       platform: 'windows-x64',
       userSid: context.identity.sid,
       release: {
@@ -1135,6 +1311,8 @@ async function runPlan(args, context) {
       planPath: targetPlanPath,
       planSha256: digest,
       approval: {
+        operation: plan.operation,
+        preflightWarnings,
         releaseSource: source?.kind ?? 'github',
         ...(source ? { catalogSha256: sha256Bytes(source.catalogBytes), nativePlanSha256: sha256Bytes(planBytes), transport: mirrorTransport(source) } : {}),
         version: plan.release.version,
@@ -1150,8 +1328,8 @@ async function runPlan(args, context) {
         profile: 'default',
         launchMode: plan.launchMode ?? 'foreground',
         publisher: 'unsigned',
-        coveredMutations: ['download', 'per-user install', 'Desktop launch', 'non-secret client entry'],
-        userPresence: ['SmartScreen or Unknown Publisher', 'first administrator', 'MCP secret entry', 'client trust'],
+        coveredMutations: ['download', retained ? 'interactive reinstall preserving the existing data directory' : 'per-user install', 'Desktop launch', 'non-secret client entry'],
+        userPresence: ['SmartScreen or Unknown Publisher', ...(retained ? ['confirm the approved application directory and existing data directory in the installer'] : ['first administrator']), 'MCP secret entry', 'client trust'],
       },
     };
   } finally {
@@ -1172,7 +1350,9 @@ function parseStrictIso(value, label) {
 
 function validatePlan(plan, context) {
   assertPlanShape(plan);
-  if (!([PLAN_SCHEMA, BACKGROUND_PLAN_SCHEMA].includes(plan.schema)) || (plan.schema === BACKGROUND_PLAN_SCHEMA && plan.launchMode !== 'agent-background') || plan.operation !== 'fresh-install' || plan.platform !== 'windows-x64'
+  const reinstall = plan.schema === REINSTALL_PLAN_SCHEMA;
+  if (!([PLAN_SCHEMA, BACKGROUND_PLAN_SCHEMA, REINSTALL_PLAN_SCHEMA].includes(plan.schema)) || (plan.schema === BACKGROUND_PLAN_SCHEMA && plan.launchMode !== 'agent-background')
+      || (reinstall && plan.launchMode !== 'interactive-installer') || plan.operation !== (reinstall ? 'reinstall-preserve-data' : 'fresh-install') || plan.platform !== 'windows-x64'
       || plan.userSid !== context.identity.sid || plan.release.repository !== RELEASE_REPOSITORY
       || plan.release.sourceRepository !== SOURCE_REPOSITORY || !isDesktopMcpUrl(plan.connection.url)
       || plan.connection.profile !== 'default' || plan.installation.dataOwnershipAcknowledged !== true) {
@@ -1204,10 +1384,16 @@ function validatePlan(plan, context) {
   }
   const localAppData = context.localAppData;
   if (plan.installation.applicationRoot !== path.join(localAppData, 'Programs', 'JishuDB')
-      || plan.installation.dataRoot !== path.join(localAppData, 'Programs', 'JishuDBData')
+      || (!reinstall && plan.installation.dataRoot !== path.join(localAppData, 'Programs', 'JishuDBData'))
       || plan.installation.bootstrapPath !== path.join(localAppData, 'JishuDB', 'data-location.json')
       || typeof plan.installation.desktopShortcut !== 'boolean') {
     fail('invalid_plan', 'plan installation destinations are invalid');
+  }
+  if (reinstall) {
+    requirePattern(plan.retainedData.instanceId, /^[0-9a-f]{32}$/, 'retained instance ID');
+    for (const key of ['bootstrapSha256', 'markerSha256']) requirePattern(plan.retainedData[key], SHA256_PATTERN, `retained ${key}`);
+    const dataRoot = normalizeLocalWindowsPath(plan.installation.dataRoot, 'retained data root');
+    if (dataRoot !== plan.installation.dataRoot) fail('invalid_plan', 'retained data root is not canonical');
   }
   if (!CONNECTION_NAME_PATTERN.test(plan.connection.name)
       || typeof plan.connection.client !== 'string' || !plan.connection.client.trim()
@@ -1240,12 +1426,12 @@ function validatePlan(plan, context) {
 }
 
 function writeDesktopEndpointConfig(bootstrapPath, mcpUrl, context) {
-  if (!isDesktopMcpUrl(mcpUrl)) fail('invalid_endpoint', 'approved Desktop MCP endpoint is invalid');
+  // Preserve the exact retained file when its validated port matches approval.
+  if (assertDesktopEndpointCompatible(bootstrapPath, mcpUrl)) return;
   const stateRoot = path.dirname(bootstrapPath);
   if (!fs.existsSync(stateRoot)) createPrivateDirectory(stateRoot, context.identity, context.tools);
   else assertRegularPath(stateRoot, 'directory', 'invalid_endpoint');
   const endpointPath = path.join(stateRoot, ENDPOINT_CONFIG_FILENAME);
-  if (fs.existsSync(endpointPath)) fail('endpoint_conflict', 'Desktop endpoint configuration appeared before launch');
   const port = Number(new URL(mcpUrl).port);
   writePrivateFileExclusive(endpointPath, `${JSON.stringify({ localPort: port, schemaVersion: ENDPOINT_CONFIG_SCHEMA }, null, 2)}\n`, context.identity, context.tools);
 }
@@ -1491,16 +1677,20 @@ async function runExecute(args, context) {
   assertReleaseSourceAvailable(args.releaseSource);
   const loaded = loadApprovedPlan(args, context);
   const { plan, resolvedPlan, transactionRoot, source, nativeBytes, nativeSha256 } = loaded;
+  const reinstall = plan.schema === REINSTALL_PLAN_SCHEMA;
+  if (reinstall && fs.existsSync(path.join(transactionRoot, 'interactive-reinstall-started.json'))) {
+    fail('installer_already_started', 'this approved reinstall has already been handed to the installer; finish or inspect it before another attempt');
+  }
   const mcpPort = Number(new URL(plan.connection.url).port);
   if (!await isTcpPortAvailable(mcpPort)) fail('endpoint_conflict', 'the approved Desktop MCP port is no longer available; create a new plan');
-  for (const target of [plan.installation.applicationRoot, plan.installation.dataRoot]) {
-    if (fs.existsSync(target)) fail('existing_installation', 'automatic installation requires absent application and data destinations');
-  }
+  assertInstallationDestinations(plan);
+  assertDesktopEndpointCompatible(plan.installation.bootstrapPath, plan.connection.url);
 
   const installerPath = path.join(transactionRoot, plan.assets.installer.name);
   const checksumPath = path.join(transactionRoot, plan.assets.checksum.name);
   const candidatePath = path.join(transactionRoot, plan.assets.candidate.name);
   const unlock = acquireDownloadLock(transactionRoot, context);
+  let installerCompleted = false;
   try {
     if (!fs.existsSync(installerPath)) fail('download_required', 'run download until status=downloaded before execute');
     assertDownloadFile(installerPath, context);
@@ -1533,13 +1723,13 @@ async function runExecute(args, context) {
       },
     };
     validateWindowsCandidate(candidate, selected);
-    if ((candidate.agentBackgroundLaunch === 1) !== (plan.schema === BACKGROUND_PLAN_SCHEMA)) fail('invalid_candidate', 'Agent launch capability no longer matches the approved plan');
+    if (!reinstall && (candidate.agentBackgroundLaunch === 1) !== (plan.schema === BACKGROUND_PLAN_SCHEMA)) fail('invalid_candidate', 'Agent launch capability no longer matches the approved plan');
     if (candidate.revision !== plan.release.sourceRevision) fail('invalid_candidate', 'candidate source revision does not match the approved plan');
     await assertSourceMatchesPlan(plan, source, context);
 
     validatePlan(plan, context);
     let nativePlanPath = resolvedPlan;
-    if (source) {
+    if (source && !reinstall) {
       // AI-generated: exact embedded bytes and their already-approved digest are
       // passed to the legacy parser; never authorize a newly serialized child.
       nativePlanPath = path.join(transactionRoot, 'native-install-plan.json');
@@ -1551,6 +1741,10 @@ async function runExecute(args, context) {
       const reloaded = loadApprovedPlan(args, context);
       if (reloaded.nativeSha256 !== nativeSha256) fail('plan_digest_mismatch', 'native plan binding changed before installation');
     }
+    assertInstallationDestinations(plan);
+    assertDesktopEndpointCompatible(plan.installation.bootstrapPath, plan.connection.url);
+    if (!await isTcpPortAvailable(mcpPort)) fail('endpoint_conflict', 'the approved Desktop MCP port became occupied before installation');
+    if (reinstall) return await launchInteractiveReinstallation(installerPath, plan, loaded, context);
     const installer = childProcess.spawnSync(installerPath, [
       '/S',
       `/JISHUDB_AGENT_PLAN=${nativePlanPath}`,
@@ -1563,6 +1757,7 @@ async function runExecute(args, context) {
     });
     if (installer.error) throw installer.error;
     if (installer.status !== 0) fail('installer_failed', `Windows installer returned exit code ${installer.status}`);
+    installerCompleted = true;
 
     const application = path.join(plan.installation.applicationRoot, 'JishuDB.exe');
     const runtime = path.join(plan.installation.applicationRoot, 'resources', 'runtime', 'jishudb.exe');
@@ -1590,6 +1785,18 @@ async function runExecute(args, context) {
       mcpUrl: plan.connection.url,
       next: 'wait_for_desktop_and_user_onboarding',
     };
+  } catch (error) {
+    if (installerCompleted) {
+      error.installation = {
+        status: 'installer_completed',
+        version: plan.release.version,
+        applicationRoot: plan.installation.applicationRoot,
+        dataRoot: plan.installation.dataRoot,
+        mcpUrl: plan.connection.url,
+        next: 'verify_existing_installation_before_launch',
+      };
+    }
+    throw error;
   } finally {
     unlock();
   }
@@ -1698,6 +1905,7 @@ async function main(argv = process.argv.slice(2)) {
       stage: ['check', 'plan', 'download', 'execute'].includes(argv[0]) ? argv[0] : 'arguments',
       errorCategory: known ? error.category : 'unexpected_failure',
       message: known ? error.publicMessage : 'installation helper failed; inspect the local diagnostic',
+      ...(error?.installation ? { installation: error.installation } : {}),
     })}\n`);
     return 1;
   }
@@ -1723,6 +1931,13 @@ const exported = {
   rateLimitDelay,
   runDownload,
   runExecute,
+  readSavedDesktopEndpoint,
+  selectInstallationEndpoint,
+  assertDesktopEndpointCompatible,
+  assertFreshInstallationDestinations,
+  readRetainedInstallation,
+  assertReinstallationDestinations,
+  writeDesktopEndpointConfig,
   validateReleaseMatchesPlan,
   approvedDesktopMcpPorts,
   assertPlanShape,
