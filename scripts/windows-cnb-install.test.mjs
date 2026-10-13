@@ -95,9 +95,14 @@ async function harness(t, options = {}) {
         }
         return { status: 0 };
       },
-      spawn(command, args) {
-        if (command.endsWith('Setup.exe')) interactiveLaunches.push({ command, args });
-        const emitter = new EventEmitter(); emitter.unref = () => {}; queueMicrotask(() => emitter.emit('spawn')); return emitter;
+      spawn(command, args, spawnOptions) {
+        if (command.endsWith('explorer.exe')) interactiveLaunches.push({ command, args, spawnOptions });
+        const emitter = new EventEmitter(); emitter.unref = () => {};
+        queueMicrotask(() => {
+          emitter.emit('spawn');
+          if (command.endsWith('explorer.exe')) emitter.emit('close', options.brokerExitCode ?? 1, null);
+        });
+        return emitter;
       },
     };
     return process.getBuiltinModule(name);
@@ -127,7 +132,7 @@ async function harness(t, options = {}) {
     isTcpPortAvailable = async () => true;
   `, context);
   const helper = context.module.exports;
-  const environment = { identity: { sid: 'S-1-5-21-1-2-3-1001' }, localAppData, tempRoot: root, tools: {} };
+  const environment = { identity: { sid: 'S-1-5-21-1-2-3-1001' }, localAppData, tempRoot: root, tools: { explorer: path.join(root, 'explorer.exe') } };
   return { ...f, helper, environment, context, root, calls, requests, launches, interactiveLaunches, setHandler: fn => { handler = fn; },
     plan: () => helper.runPlan({ releaseSource: 'cnb', planPath: '', client: 'WorkBuddy', configTarget: path.join(root, 'client.json'), connectionName: 'jishudb' }, environment) };
 }
@@ -301,10 +306,24 @@ test('retained data selects an explicit interactive reinstall and preserves its 
   assert.equal(result.next, 'complete_interactive_reinstall_and_verify_existing_data');
   assert.equal(h.launches.length, 0, 'fresh-only silent installer must never run');
   assert.equal(h.interactiveLaunches.length, 1);
-  assert.deepEqual(Array.from(h.interactiveLaunches[0].args), [], 'ordinary installer pages retain directory confirmation');
+  assert.equal(result.launchStatus, 'requested', 'broker completion does not prove the window is visible');
+  assert.deepEqual(Array.from(h.interactiveLaunches[0].args), [result.installerPath], 'the desktop shell receives only the verified installer path, with no silent flags');
+  assert.equal(h.interactiveLaunches[0].spawnOptions.shell, false);
   for (const [p, bytes] of snapshots) assert.deepEqual(fs.readFileSync(p), bytes);
   await assert.rejects(h.helper.runExecute(args(approval), h.environment), e => e.category === 'installer_already_started');
   assert.equal(h.interactiveLaunches.length, 1);
+});
+
+test('failed desktop shell handoff preserves data and does not retry the installer', async t => {
+  const h = await harness(t, { brokerExitCode: 2 });
+  const retained = retainedDataFixture(h);
+  const before = fs.readFileSync(retained.sentinel);
+  const approval = await h.plan();
+  await h.helper.runDownload(args(approval), h.environment);
+  await assert.rejects(h.helper.runExecute(args(approval), h.environment), e => e.category === 'installer_launch_failed');
+  await assert.rejects(h.helper.runExecute(args(approval), h.environment), e => e.category === 'installer_already_started');
+  assert.equal(h.interactiveLaunches.length, 1);
+  assert.deepEqual(fs.readFileSync(retained.sentinel), before);
 });
 
 for (const change of ['dataRoot', 'instanceId', 'bootstrapBytes', 'application']) {

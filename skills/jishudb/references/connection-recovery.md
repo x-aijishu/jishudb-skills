@@ -42,6 +42,7 @@ available, never authentication headers or full environment dumps.
 | Observation | Check and recovery |
 | --- | --- |
 | No host entry or wrong effective entry | Locate the configuration actually loaded by the client. Resolve overlapping scopes or overrides before editing. Offer a target choice if unresolved. |
+| File contains JishuDB but the host's MCP list does not | This is an unloaded configuration, not yet an OAuth failure. Use the host's supported reload/refresh or configuration-save action and read its list back. If no such action is exposed, return `USER_ACTION_REQUIRED` for a safe user-operated reload/import or restart. Do not ask the user to trust an entry that has not appeared. |
 | DNS failure, no route, or connection timeout | Verify the selected host and service reachability from the client. Ask for an updated address or restoration of the required network only when needed. A private IP or timeout does not prove a VPN or subnet cause. |
 | Local connection refused | Resolve `desktop-endpoint.json`; check the installed app and listener. Start the existing app within the authorized scope and current user's desktop session. An SSH service-session process is not proof of a working desktop launch. |
 | App uninstalled; endpoint or data-location JSON remains | Preserve the files. The endpoint is a port preference; the data bootstrap locates retained data. Use the installation helper's reviewed plan: valid retained data selects an interactive data-preserving reinstall, while an endpoint alone can be reused by a fresh install. Do not delete data or configuration to satisfy fresh-install checks. |
@@ -73,6 +74,35 @@ edit, back up privately, preserve unrelated entries and permissions, detect
 concurrent changes, and atomically replace only the selected entry. Re-read the
 effective configuration; changing an unused file is not a repair.
 
+### Load WorkBuddy configuration
+
+After the write, verify the host's in-memory registration separately. WorkBuddy
+5.7.7 was observed to cache user MCP entries: its `mcp:list` operation does not
+reread `mcp.json`, while `mcp:refresh` does. These are implementation identifiers,
+not an instruction to invent a CLI command or call an undocumented private
+transport. Prefer an exposed native refresh/configuration UI; if unavailable,
+provide the exact user action needed. Reopening the list or creating a new chat
+alone does not establish reload. For other clients, verify their own behavior.
+Record the selected entry's actual name, URL and transport before continuing to
+trust or OAuth; never equate an existing JSON key with an entry in the UI.
+
+Verified native path in WorkBuddy 5.7.7:
+
+1. Open **Connectors > Custom connectors > Add MCP**. Despite the button name,
+   this opens the full configuration editor, not a request for a duplicate entry.
+2. Confirm the editor's displayed configuration path and preserve all entries.
+   If it already contains the correct externally written JSON but **Save** is
+   disabled, make a whitespace-only edit outside JSON strings, then **Save**.
+3. Select **Back to MCP List** and confirm the named JishuDB entry. A first-time
+   entry may now display **Trust**; that is the user's separate trust checkpoint.
+   It does not establish server health, OAuth completion, or tool availability.
+
+Use this UI when available under the user's existing configuration authority;
+otherwise give these concrete steps to the user. Do not use private IPC,
+auto-trusting import calls, or a forced application kill to imitate this action.
+
+### Reauthorize and verify
+
 When changing service identity, do not carry the previous target's manual Token
 or OAuth grant to the new service. Remove a stale static Authorization header
 from the selected entry with a protected backup; use the client's native
@@ -100,6 +130,11 @@ Verify the loaded host entry, authenticated initialize, `tools/list`, and
 `kb_list` to resolve the intended KB on this service. KB IDs and permissions
 from the previous service are not portable. Follow runtime-readiness checks
 before importing; do not use synthetic writes to prove connectivity.
+
+Keep four results separate: configuration saved, client entry loaded, user
+authorization completed, and required host tools callable. Stop at the first
+unverified result with its specific next action. Only the final result plus
+required task readiness can be reported as `READY`.
 
 Resume the existing task with its original output directory and stable source
 identities. Reconcile ambiguous prior writes through the original service

@@ -15,7 +15,7 @@ compatibility: >-
   the user's local machine.
 metadata:
   author: jishudb
-  version: "0.1.21"
+  version: "0.1.22"
   openclaw:
     homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/jishudb
 ---
@@ -66,6 +66,10 @@ and actual host tool discovery/capability and runtime checks before returning
 to the task. If the host must refresh or the user must act, return
 `USER_ACTION_REQUIRED` with the specific next action; unsupported or declined
 setup is `BLOCKED`. Neither state permits the calling task to skip JishuDB.
+
+Writing a configuration file is not client registration. Complete the
+host-loading checkpoint below before telling the user that a connector exists
+or asking them to authorize it.
 
 ### Choose the route
 
@@ -132,7 +136,8 @@ does not prove live catalog availability or real-device installation acceptance.
 On Windows, run the Node helper's `check` mode as described in the installation
 contract. Continue only when it returns `status=compatible`. The Windows helper
 must not materialize or invoke PowerShell; it uses the packaged JavaScript and
-the fixed Windows `whoami.exe` and `icacls.exe` system tools.
+the fixed Windows `whoami.exe` and `icacls.exe` system tools, plus the Windows
+desktop shell (`explorer.exe`) for interactive installer handoff.
 These captured system-tool calls use asynchronous pipes for host compatibility;
 a native-tool error must retain its operation and OS cause, not be diagnosed as
 missing Node, a database error, or a security-policy denial without evidence.
@@ -188,7 +193,12 @@ installs without downloading the installer again. On both platforms, `execute`
 requires the complete verified download; never use it as a download command.
 
 For Windows `reinstall-preserve-data`, `execute` opens that same verified
-installer and returns `status=user_action_required`. Confirm the approved
+installer through the desktop shell and returns `status=user_action_required`
+with `launchStatus=requested`. After the tool call ends, verify that the installer
+window is actually visible before saying it is open. A successful shell dispatch
+does not prove that a GUI survived the host's process cleanup. If no window or
+installer process remains, preserve the receipt and report the failed handoff;
+inspect it before any approved retry, never loop on `execute`. Confirm the approved
 application directory and keep the existing data directory selected in its
 ordinary installer pages. Do not invoke `execute`
 again while waiting, automate confirmation, add `/S`, delete the JSON files, or
@@ -218,6 +228,51 @@ approval.
 
 If no eligible immutable stable release exists, return `BLOCKED` with the
 release-owner action. Never offer a mutable or manual download fallback.
+
+### Load the connector into the actual client
+
+After service identity is verified, complete these checkpoints in order:
+
+1. **Configuration saved:** use the host's supported add/import/configuration
+   action where available, or update its verified effective configuration file
+   under the existing approval. Read back the selected name, endpoint and
+   transport; preserve unrelated entries. A successful write proves only this
+   checkpoint.
+2. **Client entry loaded:** if configuration was edited externally, invoke the
+   host's supported refresh/reload action, then query its connector list or
+   inspect its native management UI. Confirm the actual JishuDB entry, endpoint
+   and transport. Opening a list, reading the JSON again, or opening a new chat
+   is not evidence that the host reloaded configuration. Do not invent a UI
+   entry or tell the user to click a server that has not appeared.
+3. **User authorization:** only after the entry is visible, let the user
+   complete required client trust and native browser OAuth. Do not silently
+   authorize a connector through an import action that combines configuration
+   with trust. Follow the browser callback/return-to-client checks below.
+4. **Host tools usable:** discover tools through this client and actually call
+   `kb_get_capabilities` and `kb_list`; complete required runtime-readiness
+   checks before resuming the task. A healthy service, a visible connector, and
+   successful browser consent are not substitutes for host tool calls.
+
+For WorkBuddy, verify the installed version's native MCP management behavior.
+Observed WorkBuddy 5.7.7 keeps user MCP entries in memory: the backend's
+`mcp:list` reads that catalog, while `mcp:refresh` reloads the configuration.
+The file may be correct even when the management list is still empty. Use an
+exposed supported refresh/reload or configuration-save UI if available. In 5.7.7,
+**Connectors > Custom connectors > Add MCP** opens the effective JSON editor;
+saving there loads the entry without silently granting trust. See the
+[native-save recovery steps](references/connection-recovery.md#load-workbuddy-configuration).
+Do not guess a public CLI command from internal RPC names. If the host does not expose
+such an action to the Agent, report `USER_ACTION_REQUIRED` with the exact
+configuration path and ask the user to reload/import it through the client or
+restart WorkBuddy when their active work is safe. Recheck the list afterward.
+Do not label an unloaded entry as an OAuth problem, repeatedly rewrite the same
+file, terminate the host to force reload, or promise that its next chat will
+automatically load the server.
+
+Report the last proven checkpoint. If only a file was written, say
+"configuration saved; client entry not yet loaded," not "connected" or
+"only OAuth remains." Apply this sequence to every client, using that client's
+own supported refresh, registration and authorization controls.
 
 ### Explicit macOS candidate testing
 

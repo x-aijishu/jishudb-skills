@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "sourceSkill": "jishudb",
-  "sourceVersion": "0.1.21",
+  "sourceVersion": "0.1.22",
   "generator": "scripts/bundle-task-setup.py",
   "files": [
     {
@@ -11,12 +11,12 @@
     },
     {
       "path": "references/connection-recovery.md",
-      "sha256": "d3d15a65b737153af8a6f6bec5fb0c6d4752d7e4a3c5051e7090e0b6080e1497",
+      "sha256": "0c67b8796365ac31002780183ac3b4567be62f97175d3b2867653158de67d3f1",
       "mode": "644"
     },
     {
       "path": "references/installation-contract.md",
-      "sha256": "74e8a67ce0677de8b8819dd6ed07223fb85224e692e7391ae56b12accd823c6d",
+      "sha256": "dfb9e8b562c8884ad0bc9a611a02968f796bfd5facee68e1ffa51b3ed56939d5",
       "mode": "644"
     },
     {
@@ -31,7 +31,7 @@
     },
     {
       "path": "scripts/install-windows.js",
-      "sha256": "2b242c74cfb9f39cf6184f52cf191cfe17e3775197c1ef0dc19717983b18065e",
+      "sha256": "34efc43e1b2ebbc093e68755fcb1fc12aca22d4a55fe18846dce618bde77de93",
       "mode": "755"
     },
     {
@@ -46,7 +46,7 @@
     },
     {
       "path": "setup.md",
-      "sha256": "ff9180d9336988695f4742c7c6e07ee70b5621fd53c4df931a21504b052e43df",
+      "sha256": "a4e605978da6d92993f2e551d02a0ade13751a5164cf8ac8b9bc89e59b401cf6",
       "mode": "644"
     },
     {

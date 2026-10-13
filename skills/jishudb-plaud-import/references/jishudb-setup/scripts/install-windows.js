@@ -453,6 +453,7 @@ function resolveSystemTools() {
   const tools = {
     whoami: path.join(system32, 'whoami.exe'),
     icacls: path.join(system32, 'icacls.exe'),
+    explorer: path.join(systemRoot, 'explorer.exe'),
   };
   for (const [name, target] of Object.entries(tools)) {
     let stat;
@@ -1194,17 +1195,34 @@ async function launchInteractiveReinstallation(installerPath, plan, loaded, cont
     status: 'launch_requested',
   }, null, 2)}\n`, context.identity, context.tools);
   try {
-    const installer = childProcess.spawn(installerPath, [], {
-      detached: true, env: sanitizedChildEnvironment(), stdio: 'ignore', windowsHide: false, shell: false,
+    // AI-assisted: hand the verified local executable to the user's desktop
+    // shell. A detached child still belongs to the host's Windows job and can
+    // be killed when the tool call ends. Explorer dispatches to the existing
+    // desktop; wait for that dispatch, not just creation of the broker process.
+    const broker = childProcess.spawn(context.tools.explorer, [installerPath], {
+      env: sanitizedChildEnvironment(), stdio: 'ignore', windowsHide: false, shell: false,
     });
-    await new Promise((resolve, reject) => { installer.once('spawn', resolve); installer.once('error', reject); });
-    installer.unref();
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        broker.kill();
+        reject(new Error('desktop shell handoff timed out; inspect the installer window before retrying'));
+      }, 30000);
+      broker.once('error', error => { clearTimeout(timer); reject(error); });
+      broker.once('close', (code, signal) => {
+        clearTimeout(timer);
+        // Explorer also returns 1 after successful delegation on Windows.
+        // Neither result proves the installer window exists or was completed.
+        if (!signal && (code === 0 || code === 1)) resolve();
+        else reject(new Error(`desktop shell exited with ${signal ?? code}`));
+      });
+    });
   } catch (error) {
     throw new InstallError('installer_launch_failed', 'could not start the verified reinstall wizard; inspect the launch attempt before retrying', { cause: error });
   }
   return {
     status: 'user_action_required', operation: plan.operation, version: plan.release.version,
     applicationRoot: plan.installation.applicationRoot, dataRoot: plan.installation.dataRoot,
+    installerPath, launchStatus: 'requested',
     mcpUrl: plan.connection.url, next: 'complete_interactive_reinstall_and_verify_existing_data',
   };
 }

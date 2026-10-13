@@ -373,8 +373,11 @@ application directory is accepted. A bounded tree containing only Python
 without deleting it. Existing application markers (`JishuDB.exe`, `app.asar`, or
 the service executable), unrecognized files, links and oversized residue trees
 stop execution for review. These checks run again before starting the installer.
-It starts the
-already verified installer in its ordinary interactive mode and returns `user_action_required` with
+It asks the verified Windows desktop shell (`explorer.exe`) to open the
+already verified installer in its ordinary interactive mode and waits for shell
+dispatch to finish. This prevents a direct detached installer child from being
+killed with the tool host's job. The helper returns `user_action_required`,
+`launchStatus=requested`, the exact `installerPath`, and
 `next=complete_interactive_reinstall_and_verify_existing_data`. The native
 installer reads the retained bootstrap and validates data ownership. The user
 confirms the approved application directory, keeps the existing data directory
@@ -382,6 +385,8 @@ selected, and completes the native pages. An exclusive
 transaction receipt prevents a repeated execute from starting another installer.
 Cancellation or launch failure requires inspection before another approved
 attempt; never fall back to silent fresh installation or claim completion.
+Confirm the actual installer window after the tool call returns: Explorer exit
+codes 0 and 1 can both indicate dispatch, and neither establishes GUI visibility.
 After user completion, verify the installed version/revision, bootstrap,
 original data directory and instance identity, then continue normal health and
 client checks. A directory without a valid bootstrap or matching marker needs
