@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "sourceSkill": "jishudb",
-  "sourceVersion": "0.1.19",
+  "sourceVersion": "0.1.21",
   "generator": "scripts/bundle-task-setup.py",
   "files": [
     {
@@ -16,7 +16,7 @@
     },
     {
       "path": "references/installation-contract.md",
-      "sha256": "064718b0480d15247c4da21568fb7419c8fef2f505d2bf0eba6b068bea9d41ee",
+      "sha256": "74e8a67ce0677de8b8819dd6ed07223fb85224e692e7391ae56b12accd823c6d",
       "mode": "644"
     },
     {
@@ -36,7 +36,7 @@
     },
     {
       "path": "scripts/release-mirror-catalog.cjs",
-      "sha256": "80521981f46a22c5b85c3f9982f86a0f07f3e26d58582bac6c5ba0f128a81d0c",
+      "sha256": "f07eba5f541e9432258f036fe83bd44e20568900575b958f7c59c5fd5bbc4c63",
       "mode": "644"
     },
     {

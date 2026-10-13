@@ -36,6 +36,35 @@ runtime check without a source option. Catalog publication, full CNB transfer,
 and real installer acceptance are separate gates; source support does not
 establish that a live catalog or an accepted installation exists.
 
+### Catalog schema compatibility
+
+Both platform helpers accept the signed catalog schema 1 (`jishudb-release-mirror-catalog-v1`)
+and schema 2 (`jishudb-release-mirror-catalog-v2`) through the same packaged
+verifier and independently embedded authority. The catalog schema does not
+change the native installation-plan schema or package publisher identity.
+
+Schema 2 separates the original application release (`canonicalRelease`) from
+its renewed update policy (`policyRelease`). Installer, adjacent checksum and
+candidate identities remain bound to the original application release and
+source revision. Renewed `latest.yml`, `latest-mac.yml` and `SHA256SUMS.txt`
+identify the policy release; its audit files are recorded separately in
+`evidenceArtifacts`. These policy/audit files are not installer candidates.
+
+CNB transport uses the signed immutable generation
+`v<application-version>-policy.<sequence>`, while native release tags and GitHub
+asset IDs remain the original application identity. Clients validate the
+predecessor digest field format and the signed audit inventory/generation,
+signature, expiry and selection floor. They do not independently check that
+predecessor digest against an earlier catalog. The protected publisher verifies
+the predecessor chain contents and unchanged installer bytes; clients do not
+fetch GitHub or extend an approved transaction to reconstruct that audit.
+
+A new renewal requires a newly reviewed plan. Existing exact approvals retain
+their original catalog, transport, digests and expiry, even when discovery
+advances to a newer policy generation. A renewal never extends an old approval
+or allows source/transport substitution inside it. Same-sequence equivocation,
+rollback, invalid signatures and expired catalogs remain terminal failures.
+
 ### Windows CNB approval envelope
 
 GitHub plans retain their existing native v1/v2 schema. CNB plans instead use
