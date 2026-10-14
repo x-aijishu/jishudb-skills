@@ -454,6 +454,7 @@ function resolveSystemTools() {
     whoami: path.join(system32, 'whoami.exe'),
     icacls: path.join(system32, 'icacls.exe'),
     explorer: path.join(systemRoot, 'explorer.exe'),
+    powershell: path.join(system32, 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
   };
   for (const [name, target] of Object.entries(tools)) {
     let stat;
@@ -1211,6 +1212,74 @@ function assertInstallationDestinations(plan) {
   else assertFreshInstallationDestinations(plan.installation);
 }
 
+/** Dispatch a verified local target through the existing interactive desktop. */
+async function dispatchDesktopTarget(target, context) {
+  // AI-assisted: detached children still inherit a host's Windows job. Explorer
+  // delegates to the existing desktop instead of owning the long-lived app.
+  const broker = childProcess.spawn(context.tools.explorer, [target], {
+    env: sanitizedChildEnvironment(), stdio: 'ignore', windowsHide: false, shell: false,
+  });
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      broker.kill();
+      reject(new Error('desktop shell handoff timed out; inspect the launch before retrying'));
+    }, 30000);
+    broker.once('error', error => { clearTimeout(timer); reject(error); });
+    broker.once('close', (code, signal) => {
+      clearTimeout(timer);
+      // Explorer can return 1 after delegation. Neither code proves app readiness.
+      if (!signal && (code === 0 || code === 1)) resolve();
+      else reject(new Error(`desktop shell exited with ${signal ?? code}`));
+    });
+  });
+}
+
+/** Create and read back a private shortcut; paths travel as data, never shell code. */
+async function createDesktopShortcut(shortcutPath, application, background, context) {
+  const payload = Buffer.from(JSON.stringify({
+    shortcutPath, application, workingDirectory: path.dirname(application),
+    arguments: background ? '--jishudb-agent-background' : '',
+  }), 'utf8').toString('base64');
+  // AI-assisted: use only the verified system PowerShell and WSH COM interface.
+  // No execution-policy override, elevation, scheduled task, or host-policy change.
+  const script = `$ErrorActionPreference='Stop'
+$p=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${payload}')) | ConvertFrom-Json
+if(Test-Path -LiteralPath $p.shortcutPath){throw 'Launch shortcut already exists'}
+$shell=New-Object -ComObject WScript.Shell
+$link=$shell.CreateShortcut($p.shortcutPath)
+$link.TargetPath=$p.application
+$link.Arguments=$p.arguments
+$link.WorkingDirectory=$p.workingDirectory
+$link.Save()
+$saved=$shell.CreateShortcut($p.shortcutPath)
+if($saved.TargetPath -ine $p.application -or $saved.Arguments -cne $p.arguments -or $saved.WorkingDirectory -ine $p.workingDirectory){throw 'Launch shortcut readback mismatch'}
+`;
+  await runNative(context.tools.powershell, [
+    '-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64'),
+  ], { env: sanitizedChildEnvironment(), label: 'create Desktop launch shortcut', category: 'desktop_shortcut_failed' });
+  const stat = assertRegularPath(shortcutPath, 'file', 'desktop_shortcut_failed');
+  if (stat.nlink !== 1 || stat.size === 0 || stat.size > 64 * 1024) fail('desktop_shortcut_failed', 'invalid Desktop launch shortcut');
+  await setPrivateAcl(shortcutPath, false, context.identity, context.tools);
+}
+
+/** Preserve the approved presentation mode while handing app lifetime to Explorer. */
+async function launchInstalledDesktop(plan, loaded, context) {
+  const application = assertNoReparseAncestors(path.join(plan.installation.applicationRoot, 'JishuDB.exe'), 'Desktop application');
+  assertRegularPath(application, 'file', 'installed_receipt_invalid');
+  const launchRoot = path.join(loaded.transactionRoot, `desktop-launch-${crypto.randomUUID()}`);
+  await createPrivateDirectory(launchRoot, context.identity, context.tools);
+  const shortcutPath = path.join(launchRoot, 'JishuDB.lnk');
+  try {
+    await createDesktopShortcut(shortcutPath, application, plan.launchMode === 'agent-background', context);
+    await dispatchDesktopTarget(shortcutPath, context);
+  } catch (cause) {
+    throw new InstallError('desktop_launch_failed', 'Desktop is installed but its shell launch was not confirmed; inspect the launch before retrying, do not reinstall', { cause });
+  }
+  // Retain the private link for asynchronous shell consumption and diagnosis.
+  // Dispatch is not health proof; the caller checks readiness in a new host call.
+  return { launchStatus: 'requested', launchMethod: 'desktop-shell', shortcutPath };
+}
+
 /** Hand retained data to the existing interactive installer, never its fresh-only Agent entrypoint. */
 async function launchInteractiveReinstallation(installerPath, plan, loaded, context) {
   const receiptPath = path.join(loaded.transactionRoot, 'interactive-reinstall-started.json');
@@ -1223,27 +1292,7 @@ async function launchInteractiveReinstallation(installerPath, plan, loaded, cont
     status: 'launch_requested',
   }, null, 2)}\n`, context.identity, context.tools);
   try {
-    // AI-assisted: hand the verified local executable to the user's desktop
-    // shell. A detached child still belongs to the host's Windows job and can
-    // be killed when the tool call ends. Explorer dispatches to the existing
-    // desktop; wait for that dispatch, not just creation of the broker process.
-    const broker = childProcess.spawn(context.tools.explorer, [installerPath], {
-      env: sanitizedChildEnvironment(), stdio: 'ignore', windowsHide: false, shell: false,
-    });
-    await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        broker.kill();
-        reject(new Error('desktop shell handoff timed out; inspect the installer window before retrying'));
-      }, 30000);
-      broker.once('error', error => { clearTimeout(timer); reject(error); });
-      broker.once('close', (code, signal) => {
-        clearTimeout(timer);
-        // Explorer also returns 1 after successful delegation on Windows.
-        // Neither result proves the installer window exists or was completed.
-        if (!signal && (code === 0 || code === 1)) resolve();
-        else reject(new Error(`desktop shell exited with ${signal ?? code}`));
-      });
-    });
+    await dispatchDesktopTarget(installerPath, context);
   } catch (error) {
     throw new InstallError('installer_launch_failed', 'could not start the verified reinstall wizard; inspect the launch attempt before retrying', { cause: error });
   }
@@ -1902,20 +1951,10 @@ async function runExecute(args, context) {
     assertRegularPath(plan.installation.bootstrapPath, 'file', 'installed_receipt_invalid');
     assertRegularPath(runtime, 'file', 'installed_receipt_invalid');
     await writeDesktopEndpointConfig(plan.installation.bootstrapPath, plan.connection.url, context);
-    const launched = childProcess.spawn(application, plan.launchMode === 'agent-background' ? ['--jishudb-agent-background'] : [], {
-      detached: true,
-      env: sanitizedChildEnvironment(),
-      stdio: 'ignore',
-      windowsHide: false,
-      shell: false,
-    });
-    await new Promise((resolve, reject) => {
-      launched.once('spawn', resolve);
-      launched.once('error', reject);
-    });
-    launched.unref();
+    const launch = await launchInstalledDesktop(plan, loaded, context);
     return {
       status: 'installed',
+      ...launch,
       version: plan.release.version,
       applicationRoot: plan.installation.applicationRoot,
       dataRoot: plan.installation.dataRoot,
@@ -2052,6 +2091,9 @@ async function main(argv = process.argv.slice(2)) {
 const exported = {
   InstallError,
   runNative,
+  dispatchDesktopTarget,
+  createDesktopShortcut,
+  launchInstalledDesktop,
   assertReinstallableApplication,
   runPlan,
   loadApprovedPlan,

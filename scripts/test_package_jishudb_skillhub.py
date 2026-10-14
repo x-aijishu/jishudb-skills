@@ -53,7 +53,7 @@ class SkillHubPackageTest(unittest.TestCase):
             self.assertEqual(first_artifact.read_bytes(), second_artifact.read_bytes())
 
             manifest = json.loads(Path(str(first["manifestPath"])).read_text(encoding="utf-8"))
-            self.assertEqual(manifest["version"], "0.1.25")
+            self.assertEqual(manifest["version"], "0.1.28")
             self.assertEqual(manifest["distribution"], "skillhub-compatible")
             self.assertEqual(
                 [entry["path"] for entry in manifest["files"]],
@@ -92,7 +92,7 @@ class SkillHubPackageTest(unittest.TestCase):
                     windows,
                     (SKILL_ROOT / "scripts" / "install-windows.js").read_bytes(),
                 )
-                self.assertNotIn(b"PowerShell", windows)
+                self.assertNotIn(b"ExecutionPolicy", windows)
                 self.assertNotIn(b".ps1", windows)
 
             windows_path = root / "install-windows.js"

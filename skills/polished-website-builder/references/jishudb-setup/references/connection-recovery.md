@@ -47,6 +47,8 @@ available, never authentication headers or full environment dumps.
 | Local connection refused | Resolve `desktop-endpoint.json`; check the installed app and listener. Start the existing app within the authorized scope and current user's desktop session. An SSH service-session process is not proof of a working desktop launch. |
 | App uninstalled; endpoint or data-location JSON remains | Preserve the files. The endpoint is a port preference; the data bootstrap locates retained data. Use the installation helper's reviewed plan: valid retained data selects an interactive data-preserving reinstall, while an endpoint alone can be reused by a fresh install. Do not delete data or configuration to satisfy fresh-install checks. |
 | Installer succeeded; helper failed before Desktop launch | Verify the installed version/revision, bootstrap and endpoint, then continue the authorized launch. Do not rerun fresh installation over the newly created application/data directories. |
+| Service was healthy inside a launch command but is gone in the next call | Inspect process lifetime and startup logs; host child-process cleanup is a hypothesis until verified. Do not diagnose this as missing OAuth, repeatedly reinstall, or ask the user to edit MCP JSON. Verify a supported launch survives the original tool call before continuing. |
+| `desktop_launch_failed` after installation | The Windows helper delegates a private shortcut to Explorer and preserves the approved presentation mode. Inspect the original shortcut/COM/shell diagnostic and installed-state receipt. Do not fall back to a detached child, disable host sandboxing, create a scheduled task, or run the installer again. If shell delegation is unavailable, ask the user to launch the installed app from its normal shortcut and verify health in a separate call. |
 | App executable is absent but its directory contains Python bytecode caches | Use the reviewed retained-data reinstall plan. The helper admits bounded recognized uninstall caches without deleting them; a directory alone is not a working installation. Unknown files or application binaries require review. |
 | Native identity/ACL helper fails | Preserve its error category, operation and underlying OS code. Use the packaged asynchronous system-tool implementation; do not infer a missing runtime or OS-policy denial from `EBUSY`, replace Node, or bypass SID/ACL checks. |
 | ACL hardening fails and a later plan reports `download_locked` | Inspect creation time, owner, permissions and live holders before calling a lock stale. Current helpers clean up only their own failed new files. If `cleanup.status` is `manual_recovery_required`, stop for authorized recovery of that exact file; preserve `release-floor.json` and all user data. A passing isolated probe does not establish the cause of the original denial. |
@@ -54,6 +56,7 @@ available, never authentication headers or full environment dumps.
 | Health response is not JishuDB, redirects, or a protocol response is invalid | Stop credentials and writes to this target; resolve the intended service/path. Do not bypass identity checks or TLS verification. |
 | `401` | Separate missing authentication from rejected credentials; do not guess expiry or revocation. Follow the advertised authorization flow for this exact target. |
 | `403` or missing write tools | Distinguish origin/policy rejection from proven scope or KB-access insufficiency. Request the necessary scoped authorization; do not reinstall or infer privilege from a profile label. |
+| Browser consent succeeded; client still says Authorizing | Check whether the original callback arrived and automatic return is still pending. Do not start Connect again merely to dismiss the spinner. If the authorization page reports a return failure, use its existing return link once; distinguish missing callback, token-exchange error, and tool-discovery failure. |
 | Health and direct MCP probes work but host tools are unavailable | Check host-loaded URL, authorization, trust, transport, and cached discovery. Reconnect through the host; do not report curl-only success. |
 | `429` or temporary upstream failure | Respect `Retry-After` and retry only the affected read-only probe within the bound below. |
 
@@ -77,6 +80,12 @@ effective configuration; changing an unused file is not a repair.
 
 ### Load WorkBuddy configuration
 
+Do the configuration and loading work yourself when supported controls are
+available under existing authorization. Inspect exposed host-management tools
+and, when available, the current native UI. Do not infer that the user must
+edit JSON from a missing JishuDB tool search result. If the file is correct,
+preserve it and locate the loading action instead of rewriting it.
+
 After the write, verify the host's in-memory registration separately. WorkBuddy
 5.7.7 was observed to cache user MCP entries: its `mcp:list` operation does not
 reread `mcp.json`, while `mcp:refresh` does. These are implementation identifiers,
@@ -87,7 +96,8 @@ alone does not establish reload. For other clients, verify their own behavior.
 Record the selected entry's actual name, URL and transport before continuing to
 trust or OAuth; never equate an existing JSON key with an entry in the UI.
 
-Verified native path in WorkBuddy 5.7.7:
+Historical native path verified in WorkBuddy 5.7.7; use only if the installed
+version exposes these controls and the entry is actually unloaded:
 
 1. Open **Connectors > Custom connectors > Add MCP**. Despite the button name,
    this opens the full configuration editor, not a request for a duplicate entry.
@@ -98,8 +108,13 @@ Verified native path in WorkBuddy 5.7.7:
    entry may now display **Trust**; that is the user's separate trust checkpoint.
    It does not establish server health, OAuth completion, or tool availability.
 
-Use this UI when available under the user's existing configuration authority;
-otherwise give these concrete steps to the user. Do not use private IPC,
+Use this UI yourself when available under the user's existing configuration
+authority; leave the separate Trust and OAuth prompts to the user. If no
+supported control is accessible, state the missing capability and ask for only
+the next verified loading action. Say "configuration saved; client entry not
+yet loaded" rather than asking the user to recreate JSON. Do not send the full
+historical tutorial by default or promise that a reload fixes an offline DB.
+Do not use private IPC,
 auto-trusting import calls, or a forced application kill to imitate this action.
 
 ### Reauthorize and verify

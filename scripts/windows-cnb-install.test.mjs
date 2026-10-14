@@ -128,6 +128,7 @@ async function harness(t, options = {}) {
     setPrivateAcl = () => {};
     assertPrivateAcl = () => {};
     createPrivateDirectory = target => fs.mkdirSync(target);
+    createDesktopShortcut = async target => fs.writeFileSync(target, 'fixture shortcut');
     getFreeDesktopMcpUrl = async () => 'http://127.0.0.1:8088/mcp';
     isTcpPortAvailable = async () => true;
   `, context);

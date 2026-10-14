@@ -35,7 +35,7 @@ test('installation Skill routes through deterministic plan and execute helpers',
   assert.match(skill, /Never ask for a token in chat/);
 	assert.match(skill, /desktop-endpoint\.json/);
 	assert.match(skill, /browser OAuth is the default when both endpoints verify support/);
-	assert.match(skill, /present OAuth as the recommended default[\s\S]*?Token as the explicit alternative/);
+	assert.match(skill, /When both endpoints support OAuth, use it as the default without a choice\s+menu/);
 	assert.match(skill, /If[\s\S]*?user does not select Token[\s\S]*?configure only the non-secret MCP URL/);
 	assert.match(skill, /Use a manual `jkm_` Token only when the user explicitly selects Token or the[\s\S]*?client is proven not to support OAuth/);
 	assert.match(skill, /Do not direct the user to create `jkm_` first/);
@@ -117,7 +117,7 @@ test('Windows helper rejects redirect, plan, and privilege drift', () => {
   assert.match(windows, /async function getFreeDesktopMcpUrl/);
   assert.match(windows, /function writeDesktopEndpointConfig/);
   assert.match(windows, /function isDesktopMcpUrl/);
-  assert.doesNotMatch(windows, /PowerShell|\.ps1|Invoke-Expression|ExecutionPolicy|shell:\s*true|\beval\(/);
+  assert.doesNotMatch(windows, /\.ps1|Invoke-Expression|ExecutionPolicy|shell:\s*true|\beval\(/);
 });
 
 test('embedded macOS release planner selects numeric SemVer and rejects mutable releases', (t) => {

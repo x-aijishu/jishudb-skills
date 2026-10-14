@@ -13,7 +13,7 @@ const sha256 = value => crypto.createHash('sha256').update(value).digest('hex');
 function harness(t, { occupied = [], afterInstall, launchError } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'jishudb-endpoint-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const environment = { localAppData: root, tempRoot: root, identity: { sid: 'fixture' }, tools: {} };
+  const environment = { localAppData: root, tempRoot: root, identity: { sid: 'fixture' }, tools: { explorer: path.join(root, 'explorer.exe') } };
   const installation = { applicationRoot: path.join(root, 'Programs/JishuDB'), dataRoot: path.join(root, 'Programs/JishuDBData'), bootstrapPath: path.join(root, 'JishuDB/data-location.json') };
   const endpoint = path.join(root, 'JishuDB/desktop-endpoint.json');
   const calls = [];
@@ -33,7 +33,7 @@ function harness(t, { occupied = [], afterInstall, launchError } = {}) {
       calls.push('launch');
       const child = new EventEmitter();
       child.unref = () => {};
-      queueMicrotask(() => launchError ? child.emit('error', launchError) : child.emit('spawn'));
+      queueMicrotask(() => launchError ? child.emit('error', launchError) : child.emit('close', 1, null));
       return child;
     },
   };
@@ -52,6 +52,7 @@ function harness(t, { occupied = [], afterInstall, launchError } = {}) {
     assertPrivateAcl = () => {};
     isTcpPortAvailable = async port => !endpointFixture.occupied.includes(port);
     createPrivateDirectory = target => fs.mkdirSync(target);
+    createDesktopShortcut = async target => fs.writeFileSync(target, 'fixture shortcut');
   `, sandbox);
   const helper = sandbox.module.exports;
   function save(value = { schemaVersion: 1, localPort: 8088 }) {
@@ -183,7 +184,7 @@ test('post-install endpoint conflict reports completed installation and never la
 test('launch failure preserves its original error and reports the installed state', async t => {
   const cause = Object.assign(new Error('fixture launch failed'), { code: 'EACCES' });
   const h = harness(t, { launchError: cause });
-  await assert.rejects(h.prepareExecute()(), error => error === cause && error.installation.status === 'installer_completed');
+  await assert.rejects(h.prepareExecute()(), error => error.category === 'desktop_launch_failed' && error.cause === cause && error.installation.status === 'installer_completed');
   assert.deepEqual(h.calls, ['install', 'launch']);
   assert.ok(fs.existsSync(h.installation.dataRoot));
 });

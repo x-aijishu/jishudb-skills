@@ -11,11 +11,12 @@ description: >-
 compatibility: >-
   Automatic Desktop installation requires local shell and network access in a
   supported macOS arm64 or Windows x64 user session. Windows also requires
-  Node.js 22 or later. A remote or sandboxed agent cannot install software on
+  Node.js 22 or later, system Windows PowerShell and an interactive Explorer
+  desktop. A remote or sandboxed agent cannot install software on
   the user's local machine.
 metadata:
   author: jishudb
-  version: "0.1.25"
+  version: "0.1.28"
   openclaw:
     homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/jishudb
 ---
@@ -63,8 +64,10 @@ selected remote service must be repaired on its own route, not replaced.
 
 After installation, finish client registration, user-operated authorization,
 and actual host tool discovery/capability and runtime checks before returning
-to the task. If the host must refresh or the user must act, return
-`USER_ACTION_REQUIRED` with the specific next action; unsupported or declined
+to the task. Perform supported host refresh/configuration actions yourself
+within existing authorization. Only when a required control is unavailable to
+the Agent or the user must personally act, return `USER_ACTION_REQUIRED` with
+the specific next action; unsupported or declined
 setup is `BLOCKED`. Neither state permits the calling task to skip JishuDB.
 
 Writing a configuration file is not client registration. Complete the
@@ -104,7 +107,9 @@ or asking them to authorize it.
 
 ### Recover an unavailable connection
 
-When JishuDB tools are missing, no client entry exists, or a connection fails, read
+For routine missing tools or a new connection, use
+[references/setup-quickstart.md](references/setup-quickstart.md). For a specific
+failure or unresolved client-loading step, read the relevant section of
 [references/connection-recovery.md](references/connection-recovery.md).
 Diagnose the configured target, service startup, authentication, and actual
 client separately. Offer only relevant recovery choices; honor a target or
@@ -262,6 +267,11 @@ release-owner action. Never offer a mutable or manual download fallback.
 
 After service identity is verified, complete these checkpoints in order:
 
+Installation and launch are separate checkpoints. Verify health in a new host
+tool call after the launch command has returned, and recheck after returning
+from user authorization. If the process/listener disappeared, diagnose startup
+before asking the user to reload configuration or authorize an offline service.
+
 1. **Configuration saved:** use the host's supported add/import/configuration
    action where available, or update its verified effective configuration file
    under the existing approval. Read back the selected name, endpoint and
@@ -283,6 +293,7 @@ After service identity is verified, complete these checkpoints in order:
    successful browser consent are not substitutes for host tool calls.
 
 For WorkBuddy, verify the installed version's native MCP management behavior.
+The following is historical evidence, not a required path for every version.
 Observed WorkBuddy 5.7.7 keeps user MCP entries in memory: the backend's
 `mcp:list` reads that catalog, while `mcp:refresh` reloads the configuration.
 The file may be correct even when the management list is still empty. Use an
@@ -290,10 +301,14 @@ exposed supported refresh/reload or configuration-save UI if available. In 5.7.7
 **Connectors > Custom connectors > Add MCP** opens the effective JSON editor;
 saving there loads the entry without silently granting trust. See the
 [native-save recovery steps](references/connection-recovery.md#load-workbuddy-configuration).
-Do not guess a public CLI command from internal RPC names. If the host does not expose
-such an action to the Agent, report `USER_ACTION_REQUIRED` with the exact
-configuration path and ask the user to reload/import it through the client or
-restart WorkBuddy when their active work is safe. Recheck the list afterward.
+Check exposed host-management tools and available authorized UI controls before
+delegating this work. A tool search miss alone does not prove a cache problem.
+Do not guess a public CLI command from internal RPC names. If no supported
+action is accessible to the Agent, report `USER_ACTION_REQUIRED` for the
+smallest verified reload/import action, or a safe user-operated restart when
+appropriate. Say that configuration is already saved; do not routinely ask the
+user to write JSON or present the historical editor sequence as mandatory.
+Recheck the list afterward.
 Do not label an unloaded entry as an OAuth problem, repeatedly rewrite the same
 file, terminate the host to force reload, or promise that its next chat will
 automatically load the server.
@@ -339,10 +354,14 @@ number, background process, or successful installation alone.
   schema: explain that the current installation may require ordinary app setup.
   Do not promise passwordless onboarding, silently upgrade, or disable verification.
 
-Browser consent and client connection are separate completion steps. If the
-browser shows "authorized" but remains on the handoff page, direct the user to
-click "Return to client" and confirm opening the intended host if the browser
-asks. Do this promptly; do not send them to the DB homepage or password setup.
+Browser consent and client connection are separate completion steps. Allow
+the advertised automatic return to finish before requesting a manual action.
+An `Authorizing` client can be waiting for its callback; it does not by itself
+mean consent failed. Do not click Connect again or start a second authorization
+while the current flow is waiting to return. If the page reports that automatic
+return failed, use its existing "Return to client" fallback and confirm opening
+the intended host if the OS asks. This reuses the same authorization result.
+Do not send the user to the DB homepage or password setup.
 The host must finish the callback, token exchange, and tool discovery before
 setup is ready. On `InvalidGrantError`, check the actual callback failure and
 whether the code expired; start a fresh native authorization if needed, never
@@ -386,10 +405,10 @@ installation reference for the exact formats and OS checks.
   challenge includes valid `resource_metadata`, the protected-resource and
   authorization-server metadata validate for the exact endpoint, and the client
   supports a native browser OAuth flow.
-- When both endpoints support OAuth, present OAuth as the recommended default
-  and Token as the explicit alternative before any authorization mutation. If
-  the user does not select Token, configure only the non-secret MCP URL and use
-  the client's browser OAuth flow. Do not direct the user to create `jkm_` first.
+- When both endpoints support OAuth, use it as the default without a choice
+  menu. If the user does not select Token, configure only the non-secret MCP URL
+  and use the client's browser OAuth flow; the user grants consent there.
+  Do not direct the user to create `jkm_` first.
 - Use a manual `jkm_` Token only when the user explicitly selects Token or the
   client is proven not to support OAuth. Then direct the signed-in administrator
   to Settings -> MCP connections and return `USER_ACTION_REQUIRED` for the

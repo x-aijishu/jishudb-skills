@@ -14,7 +14,7 @@ compatibility: >-
 metadata:
   author: jishudb
   bundled-setup: jishudb
-  version: "0.1.14"
+  version: "0.1.17"
   openclaw:
     homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/polished-website-builder
 ---
@@ -68,17 +68,17 @@ pending until it passes.
    and write authorization pass.
    A healthy endpoint, saved URL, installed app, or remembered KB is insufficient.
 
-After `installed`, read the full [installation and connection guide](references/jishudb-setup/setup.md) for the discovered onboarding route. For
-`initial-consent` or `owner-consent`, configure the verified host entry and use
-its native OAuth connection flow; do not send the user to the DB homepage to
-create a password. `passwordEnrollmentRequired` for management access is not
-an Agent prerequisite on those routes. Identify a pending client-trust prompt
-separately from OAuth consent. A browser saying "authorized" still needs a
-successful return to the client and actual host tool discovery. If the browser
-remains on the authorized page, ask the user to click "Return to client"
-promptly and confirm opening the intended host when prompted. If that return
-fails, diagnose the callback and reconnect through the client; do not reinstall,
-request a password, or claim readiness from the browser message alone.
+After `installed`, continue the quickstart's **Connect after installation**
+steps. Verify service health in a separate tool call after launch returns,
+then configure and load the connector through supported host controls yourself.
+Keep routine configuration work with the Agent when those controls are available;
+request user action only for a real presence prompt or a proven missing host
+capability. For supported `initial-consent` or `owner-consent`, use native OAuth
+without management-password setup. The user completes Trust/OAuth; allow
+automatic return before using a manual fallback. Do not start Connect again
+while the original callback is pending. A browser success page alone is not readiness. Read only the
+relevant onboarding or runtime-preparation section of the full
+[setup guide](references/jishudb-setup/setup.md) when those details are needed.
 
 ### Reuse setup authorization without a choice menu
 
@@ -96,7 +96,8 @@ consequential ambiguity actually prevents the task. Necessary material-selection
 source-access, transfer, and retention consent remain task-specific requirements;
 installation approval does not grant them.
 
-Return `USER_ACTION_REQUIRED` for pending approval, OAuth, or client refresh.
+Return `USER_ACTION_REQUIRED` for pending approval, OAuth, or a required client
+action that the Agent cannot perform through available supported controls.
 Return `BLOCKED` for unsupported or declined setup, with the observed reason
 and next action. If inspection or plan generation fails, report that exact
 failure rather than inventing a plan or offering a local-only substitute.
