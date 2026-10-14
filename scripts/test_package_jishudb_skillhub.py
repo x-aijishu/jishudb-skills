@@ -16,6 +16,7 @@ EXPECTED_FILES = [
     "jishudb/references/cnb-macos-installation.md",
     "jishudb/references/connection-recovery.md",
     "jishudb/references/installation-contract.md",
+    "jishudb/references/setup-quickstart.md",
     "jishudb/scripts/install-macos-cnb.cjs",
     "jishudb/scripts/install-macos.sh",
     "jishudb/scripts/install-windows.js",
@@ -52,7 +53,7 @@ class SkillHubPackageTest(unittest.TestCase):
             self.assertEqual(first_artifact.read_bytes(), second_artifact.read_bytes())
 
             manifest = json.loads(Path(str(first["manifestPath"])).read_text(encoding="utf-8"))
-            self.assertEqual(manifest["version"], "0.1.24")
+            self.assertEqual(manifest["version"], "0.1.25")
             self.assertEqual(manifest["distribution"], "skillhub-compatible")
             self.assertEqual(
                 [entry["path"] for entry in manifest["files"]],

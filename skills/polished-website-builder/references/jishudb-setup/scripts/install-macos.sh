@@ -688,7 +688,9 @@ function run(argv) {
     if (argv[0] === 'plan') {
       const plan = readJSON(argv[1]);
       return JSON.stringify({
-        status: 'approval_required',
+        status: 'plan_ready',
+        authorization: { status: 'caller_verification_required', basis: 'existing_user_request_or_new_confirmation' },
+        next: 'download_when_authorized',
         planPath: argv[1],
         planSha256: argv[2],
         approval: {

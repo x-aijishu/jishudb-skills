@@ -29,13 +29,14 @@ test('Skill package is deterministic and binds every reviewed file', (t) => {
   const manifest = JSON.parse(fs.readFileSync(first.manifestPath, 'utf8'));
   assert.equal(manifest.product, 'jishudb-agent-skill');
   assert.equal(manifest.name, 'jishudb');
-  assert.equal(manifest.version, '0.1.24');
+  assert.equal(manifest.version, '0.1.25');
   assert.equal(manifest.publicationEligible, !manifest.sourceTreeDirty);
   assert.deepEqual(manifest.files.map((entry) => entry.path), [
     'SKILL.md',
     'references/cnb-macos-installation.md',
     'references/connection-recovery.md',
-  'references/installation-contract.md',
+    'references/installation-contract.md',
+    'references/setup-quickstart.md',
     'scripts/install-macos-cnb.cjs',
     'scripts/install-macos.zsh',
     'scripts/install-windows.js',

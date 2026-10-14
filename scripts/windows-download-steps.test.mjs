@@ -10,7 +10,7 @@ const source = fs.readFileSync(new URL('../skills/jishudb/scripts/install-window
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const assetHost = 'https://release-assets.githubusercontent.com/github-production-release-asset/1316997274/installer';
 
-function harness(t, bytes, network) {
+function harness(t, bytes, network, options = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'windows-download-test-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const assets = Object.fromEntries(['installer', 'checksum', 'candidate'].map((role, index) => [role, {
@@ -26,7 +26,10 @@ function harness(t, bytes, network) {
   const release = { id: 1, immutable: true, draft: false, prerelease: false, tag_name: 'v0.9.8', target_commitish: 'main',
     assets: Object.values(assets).map(a => ({ ...a, state: 'uploaded', digest: `sha256:${a.sha256}` })) };
   const calls = [];
-  const context = vm.createContext({ AbortSignal, Buffer, URL, console, module: { exports: {} }, process,
+  const runtime = Object.create(process);
+  runtime.getBuiltinModule = name => name === 'node:fs' && options.statfs
+    ? { ...fs, statfsSync: options.statfs } : process.getBuiltinModule(name);
+  const context = vm.createContext({ AbortSignal, Buffer, URL, console, module: { exports: {} }, process: runtime,
     setTimeout, clearTimeout, fixture: { root, plan }, fetch: async (url, options) => {
       calls.push({ url: String(url), options });
       if (String(url).endsWith('/releases/1')) return Response.json(release);
@@ -49,6 +52,24 @@ function harness(t, bytes, network) {
   return { helper: context.module.exports, root, plan, calls, context,
     run: () => context.module.exports.runDownload({}, { identity: {}, tools: {} }) };
 }
+
+test('insufficient cache space stops before network access and releases the owned lock', async t => {
+  const h = harness(t, Buffer.alloc(1024), () => { throw new Error('Network must not be called'); },
+    { statfs: () => ({ bavail: 512n, bsize: 1n }) });
+  await assert.rejects(h.run(), error => error.category === 'insufficient_download_space'
+    && /1024 more bytes.*512/.test(error.message));
+  assert.equal(h.calls.length, 0);
+  assert.equal(fs.existsSync(path.join(h.root, 'download.lock')), false);
+});
+
+test('storage inspection failure preserves its cause without masquerading as network failure', async t => {
+  const cause = Object.assign(new Error('volume unavailable'), { code: 'EIO' });
+  const h = harness(t, Buffer.alloc(1024), () => { throw new Error('Network must not be called'); },
+    { statfs() { throw cause; } });
+  await assert.rejects(h.run(), error => error.category === 'download_storage_unavailable' && error.cause === cause);
+  assert.equal(h.calls.length, 0);
+  assert.equal(fs.existsSync(path.join(h.root, 'download.lock')), false);
+});
 
 function range(bytes, start = 0, end = bytes.length - 1, total = bytes.length) {
   return new Response(bytes, { status: 206, headers: { 'content-range': `bytes ${start}-${end}/${total}`, 'content-length': String(end - start + 1) } });

@@ -102,8 +102,10 @@ location from a timeout, or claim success after only changing a URL.
 
 ### Automatic Desktop installation
 
-Read [references/installation-contract.md](references/installation-contract.md)
-before installing or troubleshooting an installer transaction.
+For routine local setup, start with [the short execution path](references/setup-quickstart.md).
+It avoids repeated discovery and unnecessary reference loading. Read
+[the full installation contract](references/installation-contract.md) for a
+specific warning, unsupported case or installer failure.
 
 Use only the packaged helper for the current platform:
 
@@ -140,7 +142,11 @@ inherited configuration; do not change system proxy settings or silently bypass
 a configured proxy when it fails. System/PAC-only and SOCKS proxy discovery are
 not implemented; do not claim the helper inherits them automatically.
 
-Then run the helper in `plan` mode. The plan is read-only for product,
+Then run the helper in `plan` mode without asking whether to inspect or plan.
+A retained data directory, endpoint file, or Python cache alone is not an
+installed application. Missing application binaries on a supported local host
+must proceed to this read-only plan instead of an "install or stop" menu.
+The plan is read-only for product,
 installation, client, and release state and may create only private ephemeral
 evidence. It must resolve the exact release, asset digests, source revision,
 application/data destinations, client, configuration target, connection name,
@@ -161,19 +167,35 @@ back to the domestic mirror without another Desktop click. This preparation
 authority is separate from ordinary read/write permissions and does not authorize
 model configuration changes. Older runtimes may not support this step.
 
-Show the helper's complete redacted approval envelope and ask once for the
-exact default transaction: verified download, per-user installation,
-Desktop launch, and the named non-secret client entry. After approval, pass the
-unchanged plan path and SHA-256 to the platform steps below. Do not recreate release logic with
-ad hoc commands, select a newer release, retry a failed installer, or reuse the
-approval after drift.
+Treat `plan_ready` as an internal checkpoint, not a mandatory question.
+Check existing user authorization against the concrete transaction. An explicit
+request to install/connect JishuDB, complete the required local setup, or
+reinstall while preserving data covers the corresponding default transaction;
+do not ask again merely because the helper generated a plan. A content task or
+installing this Skill alone is not blanket permission to change applications.
+
+Proceed under existing authorization when the version/source, application and
+data locations, retained-data identity, client/endpoint and permission scope
+fit that authorization. Keep plan paths, hashes and the full `approval` object
+in tool evidence rather than presenting an intake table. State one short update,
+for example: "Installing JishuDB 0.9.13 from CNB, preserving your data and
+connecting WorkBuddy." If installation authorization is genuinely missing, ask
+one brief confirmation for that concrete action after the plan is ready.
+
+Ask only for uncovered material changes: deleting data, changing a data root,
+replacing another installation, selecting a different service/source/release,
+or expanding privileges. OS publisher, agreement, data-directory and OAuth
+consent remain user-operated even when installation is authorized. Pass the
+unchanged plan path and SHA-256 to the platform steps; never edit a plan to
+represent authorization or bypass its validation.
 
 For macOS, first call `download --plan <path> --plan-sha256 <digest>` using
 `scripts/install-macos.sh`. For Windows, call `node scripts/install-windows.js
 download -PlanPath <path> -PlanSha256 <digest>`. Each call has a bounded transfer and returns one
 JSON result. On `download_pending`, report `downloadedBytes` / `totalBytes` and
 call `download` again with the same approved plan. These are successful
-continuations, not failed-installer retries. Use a host timeout of at least
+continuations, not failed-installer retries. Do not end the turn with only a
+progress report while another bounded step can proceed. Use a host timeout of at least
 120 seconds per download step; do not wrap all steps in one foreground command.
 On `download_waiting`, preserve the partial file and honor `retryAfterSeconds`
 before another download call; never create a new plan to evade rate limits.
@@ -199,9 +221,15 @@ handoff is not an installation-complete or MCP-ready result.
 A failed result includes `stage` and `errorCategory`. Preserve them; an outer
 host kill or timeout alone does not prove OS/sandbox denial or a completed
 checksum. Stop on `failed`, including a stalled transfer or invalid byte range;
-never silently choose a local-only output or renew approval on the user's
-behalf. A missing/expired plan requires a fresh reviewed plan. macOS plans
-expire after two hours, shown in the envelope; Windows remains 30 minutes.
+never silently choose a local-only output or retry an unresolved installer
+failure. Do not edit or extend an expired plan. Generate a fresh plan, compare
+its release/digests, destinations, retained-data identity and client scope, then
+check it against existing user authorization. An exact-plan-only or explicitly
+time-limited approval cannot be silently renewed. Renewed metadata or changed
+scope needs review; broad still-valid setup authorization need not be requested
+again for an otherwise unchanged transaction. Preserve existing verified cache
+only through helper-supported validation. macOS plans expire after two hours;
+Windows remains 30 minutes.
 
 For a same-machine client, state in the approval envelope that post-launch
 browser OAuth is the default when both endpoints verify support, while manual
@@ -211,9 +239,9 @@ authorization route and does not add or alter a helper plan field.
 OS publisher/Gatekeeper UI, any required first-administrator creation, client trust, and
 either browser OAuth consent or protected manual Token entry remain
 user-presence gates. Wait and resume after them without requesting another
-Agent mutation approval. An upgrade, different destination, different
-endpoint/client, write-capable profile, retry, or repair requires a new
-approval.
+Agent mutation approval. An uncovered upgrade, changed destination or
+endpoint/client, expanded profile, or repair beyond the authorized scope needs
+new confirmation. An in-scope continuation is not a new authorization gate.
 
 If no eligible immutable stable release exists, return `BLOCKED` with the
 release-owner action. Never offer a mutable or manual download fallback.

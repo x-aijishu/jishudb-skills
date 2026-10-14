@@ -28,7 +28,9 @@ test('installation Skill routes through deterministic plan and execute helpers',
   assert.match(skill, /scripts\/install-windows\.js/);
   assert.match(skill, /run the Node helper's `check` mode/);
   assert.match(skill, /Then run the helper in `plan` mode/);
-  assert.match(skill, /Show the helper's complete redacted approval envelope and ask once/);
+  assert.match(skill, /Treat `plan_ready` as an internal checkpoint/);
+  assert.match(skill, /Check existing user authorization against the concrete transaction/);
+  assert.match(skill, /OS publisher, agreement, data-directory and OAuth/);
   assert.match(skill, /If no eligible immutable stable release exists, return `BLOCKED`/);
   assert.match(skill, /Never ask for a token in chat/);
 	assert.match(skill, /desktop-endpoint\.json/);

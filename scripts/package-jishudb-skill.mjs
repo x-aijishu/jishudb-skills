@@ -13,6 +13,7 @@ const expectedFiles = [
   'references/cnb-macos-installation.md',
   'references/connection-recovery.md',
   'references/installation-contract.md',
+  'references/setup-quickstart.md',
   'scripts/install-macos-cnb.cjs',
   'scripts/install-macos.zsh',
   'scripts/install-windows.js',

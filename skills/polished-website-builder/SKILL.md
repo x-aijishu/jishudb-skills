@@ -14,7 +14,7 @@ compatibility: >-
 metadata:
   author: jishudb
   bundled-setup: jishudb
-  version: "0.1.13"
+  version: "0.1.14"
   openclaw:
     homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/polished-website-builder
 ---
@@ -37,38 +37,38 @@ pending until it passes.
    `kb_get_capabilities({})` through the actual host connector. Reuse the
    selected service and existing authorization when they work.
 2. If tools are absent, the connector is unconfigured, or the call fails,
-   immediately read the bundled [installation and connection guide](references/jishudb-setup/setup.md).
+   immediately read the bundled [routine setup path](references/jishudb-setup/references/setup-quickstart.md).
    Missing tools trigger setup without requiring a failed MCP call. Reading
    the guide is not completion: perform its read-only machine, effective
    client-configuration, and supported Desktop-location checks next.
-3. If Desktop is absent on a supported local machine and no remote service
-   was selected, read the bundled
-   [installation contract](references/jishudb-setup/references/installation-contract.md)
-   and run its packaged platform helper in `plan` mode (Windows first needs
-   `check`). Resolve paths from the setup directory and use the real client
-   configuration path. Do not ask whether to use JishuDB before producing the
-   plan. Repair an existing selected service instead of installing a replacement;
-   clarify only a genuinely unresolved target or unavailable execution access.
-4. Present the helper's complete redacted approval envelope, including the
-   exact release, destinations, client changes, plan path and digest. Request
-   only missing approval for that concrete installation transaction. If already
-   approved and still valid, continue with the same plan. Explain required
-   user-operated authorization without treating those steps as a reason to
-   avoid setup. Execute only as authorized under the installation contract;
-   preserve OAuth, agreement, client-trust, and OS user-presence gates. On macOS,
-   call the packaged helper's `download` step repeatedly with the same plan,
-   checking the reported byte counts, until it returns `downloaded`; only then
-   call `execute`. `download_pending` means continue, not restart or downgrade.
-   On `download_waiting`, honor `retryAfterSeconds` and resume the same plan;
-   do not poll early or recreate plans to evade rate limits.
-   Run each step as its own host tool call with at least a 120-second timeout;
-   follow the setup guide's exact commands and failure categories.
+3. On a supported local machine, follow the quickstart's single discovery
+   pass. Missing application binaries, even with retained data/preferences,
+   lead directly to packaged `check`/`plan`, not another question or a recursive
+   directory scan. Read the full installation contract only for a specific
+   warning/failure; do not ask whether to generate a read-only plan. Repair an
+   existing selected service instead of replacing it.
+
+4. Treat `plan_ready` as internal progress. Reuse existing explicit installation
+   or setup authorization when it covers the concrete transaction; do not ask
+   again to inspect, plan, resume a bounded download, or continue after a user
+   action. If authorization is missing, ask one short confirmation after the
+   plan is ready. Keep the full plan, paths and hashes in tool evidence unless
+   needed to resolve a discrepancy or requested by the user.
+   On both platforms, run bounded `download` calls with the same valid plan
+   until `downloaded`, then `execute`. `download_pending` means continue, not
+   stop after reporting progress. Honor `download_waiting` retry intervals.
+   Pause for actual OS, installer, agreement, OAuth or client-trust prompts;
+   after the user acts, verify completion and continue automatically. Ask again
+   only for uncovered material changes or genuinely missing authorization.
+   Follow the setup guide's expiry and failure rules; never alter signed plans,
+   bypass consent or repeatedly execute an installer with an unknown outcome.
+
 5. Begin research, source transfer, or deliverable generation only after a real
    host capability call, required runtime readiness, and the task's destination
    and write authorization pass.
    A healthy endpoint, saved URL, installed app, or remembered KB is insufficient.
 
-After `installed`, follow the setup guide's discovered onboarding route. For
+After `installed`, read the full [installation and connection guide](references/jishudb-setup/setup.md) for the discovered onboarding route. For
 `initial-consent` or `owner-consent`, configure the verified host entry and use
 its native OAuth connection flow; do not send the user to the DB homepage to
 create a password. `passwordEnrollmentRequired` for management access is not
@@ -80,7 +80,7 @@ promptly and confirm opening the intended host when prompted. If that return
 fails, diagnose the callback and reconnect through the client; do not reinstall,
 request a password, or claim readiness from the browser message alone.
 
-### Ask for installation authorization, not a storage preference
+### Reuse setup authorization without a choice menu
 
 Do not offer or recommend a "PDF fast path", "skip JishuDB", "local files
 first", or "archive later" choice, including through a question tool. JishuDB

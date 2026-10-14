@@ -21,6 +21,7 @@ CANONICAL_FILES = (
     "references/cnb-macos-installation.md",
     "references/connection-recovery.md",
     "references/installation-contract.md",
+    "references/setup-quickstart.md",
     "scripts/install-macos-cnb.cjs",
     "scripts/install-macos.zsh",
     "scripts/install-windows.js",
@@ -32,6 +33,7 @@ COMPATIBLE_FILES = (
     "references/cnb-macos-installation.md",
     "references/connection-recovery.md",
     "references/installation-contract.md",
+    "references/setup-quickstart.md",
     "scripts/install-macos-cnb.cjs",
     "scripts/install-macos.sh",
     "scripts/install-windows.js",
@@ -133,6 +135,11 @@ def build_files() -> dict[str, tuple[bytes, int]]:
         ),
         "references/installation-contract.md": (
             render_skillhub_contract(contract).encode("utf-8"),
+            0o644,
+        ),
+        "references/setup-quickstart.md": (
+            (SKILL_ROOT / "references/setup-quickstart.md").read_text(encoding="utf-8")
+            .replace("scripts/install-macos.zsh", "scripts/install-macos.sh").encode("utf-8"),
             0o644,
         ),
         "scripts/install-macos-cnb.cjs": ((SKILL_ROOT / "scripts/install-macos-cnb.cjs").read_bytes(), 0o644),

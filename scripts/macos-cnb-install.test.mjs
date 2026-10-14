@@ -227,7 +227,7 @@ test('actual JXA plan contract accepts signed CNB binding and preserves canonica
   const source = readFileSync(new URL('../skills/jishudb/scripts/install-macos.zsh', import.meta.url), 'utf8');
   const embedded = source.match(/<<'JXA'\r?\n([\s\S]*?)\r?\nJXA\r?\n/)[1];
   class FixtureDate extends Date { constructor(...args) { super(...(args.length ? args : [NOW])); } }
-  const helpers = runInNewContext(`${embedded}\n({selectFromReleases,createPlan,validatePlan});`, {
+  const helpers = runInNewContext(`${embedded}\n({selectFromReleases,createPlan,validatePlan, result(plan) { readJSON = () => plan; return JSON.parse(run(["result", "plan", "/tmp/plan.json", "a".repeat(64)])); }});`, {
     ObjC: { import() {} }, Date: FixtureDate,
   });
   const selection = helpers.selectFromReleases([context().release], null);
@@ -236,6 +236,12 @@ test('actual JXA plan contract accepts signed CNB binding and preserves canonica
     distribution: { teamIdentifier: 'ABCDEFGHIJ' }, agentBackgroundLaunch: 1 },
   ['501', '/Users/test/Applications/JishuDB.app', '/Users/test/Library/Application Support/JishuDB', 'test', '/Users/test/mcp.json', 'jishudb', 'http://127.0.0.1:8088/mcp']);
   assert.equal(helpers.validatePlan(approved).transport.source, 'cnb');
+  const ready = helpers.result(approved);
+  assert.equal(ready.status, 'plan_ready');
+  assert.equal(ready.authorization.status, 'caller_verification_required');
+  assert.equal(ready.authorization.basis, 'existing_user_request_or_new_confirmation');
+  assert.equal(ready.next, 'download_when_authorized');
+  assert.equal(ready.approval.releaseSource, 'cnb');
   assert.match(approved.assets.installer.url, /^https:\/\/api\.github\.com\//);
   const originalExpiry = approved.expiresAt;
   assert.equal(originalExpiry, context().envelope.payload.expiresAt);
@@ -279,7 +285,7 @@ test('actual macOS JXA planner keeps schema 2 policy tags out of native release 
   const source = readFileSync(new URL('../skills/jishudb/scripts/install-macos.zsh', import.meta.url), 'utf8');
   const embedded = source.match(/<<'JXA'\r?\n([\s\S]*?)\r?\nJXA\r?\n/)[1];
   class FixtureDate extends Date { constructor(...args) { super(...(args.length ? args : [NOW])); } }
-  const helpers = runInNewContext(`${embedded}\n({selectFromReleases,createPlan,validatePlan});`, {
+  const helpers = runInNewContext(`${embedded}\n({selectFromReleases,createPlan,validatePlan, result(plan) { readJSON = () => plan; return JSON.parse(run(["result", "plan", "/tmp/plan.json", "a".repeat(64)])); }});`, {
     ObjC: { import() {} }, Date: FixtureDate,
   });
   const mirror = context(signed(renewCatalogPayload(payload())));

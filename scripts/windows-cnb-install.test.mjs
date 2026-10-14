@@ -150,6 +150,9 @@ function rewrite(approval, mutate) {
 test('CNB plan, bounded resume and execute use actual HTTP with every GitHub destination forbidden', async t => {
   const h = await harness(t, { installerBytes: Buffer.alloc(16 * 1024 * 1024 + 23, 71) });
   const approval = await h.plan();
+  assert.equal(approval.status, 'plan_ready');
+  assert.equal(approval.authorization.status, 'caller_verification_required');
+  assert.equal(approval.next, 'download_when_authorized');
   assert.equal(approval.approval.releaseSource, 'cnb');
   const outer = JSON.parse(fs.readFileSync(approval.planPath));
   assert.equal(outer.nativePlan.sha256, approval.approval.nativePlanSha256);

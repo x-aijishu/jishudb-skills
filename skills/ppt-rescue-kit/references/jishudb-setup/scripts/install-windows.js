@@ -1426,7 +1426,9 @@ async function runPlan(args, context) {
     if (sha256File(targetPlanPath) !== digest) fail('plan_drift', 'plan changed before approval');
     planReady = true;
     return {
-      status: 'approval_required',
+      status: 'plan_ready',
+      authorization: { status: 'caller_verification_required', basis: 'existing_user_request_or_new_confirmation' },
+      next: 'download_when_authorized',
       planPath: targetPlanPath,
       planSha256: digest,
       approval: {
@@ -1697,6 +1699,21 @@ async function requestDownload(url, options) {
   }
 }
 
+/** Reject a known storage shortage before spending time on network requests. */
+function assertDownloadSpace(directory, remainingBytes) {
+  if (remainingBytes === 0) return;
+  let available;
+  try {
+    const stats = fs.statfsSync(directory, { bigint: true });
+    available = stats.bavail * stats.bsize;
+  } catch (cause) {
+    throw new InstallError('download_storage_unavailable', 'could not inspect download storage; check access to the cache drive', { cause });
+  }
+  if (available < BigInt(remainingBytes)) {
+    fail('insufficient_download_space', `download needs ${remainingBytes} more bytes but only ${available} are available; free space on the cache drive and retry within valid authorization`);
+  }
+}
+
 /** Download one range without installing, launching, or changing client configuration. */
 async function runDownload(args, context) {
   assertReleaseSourceAvailable(args.releaseSource);
@@ -1707,6 +1724,7 @@ async function runDownload(args, context) {
     const installerPath = path.join(transactionRoot, plan.assets.installer.name);
     offset = fs.existsSync(installerPath) ? (await assertDownloadFile(installerPath, context)).size : 0;
     if (offset > plan.assets.installer.size) fail('invalid_download_cache', 'partial installer exceeds the approved size');
+    assertDownloadSpace(transactionRoot, plan.assets.installer.size - offset);
     const snapshotPath = path.join(transactionRoot, 'download-release.json');
     if (sourceInfo && offset > 0 && !fs.existsSync(snapshotPath)) fail('invalid_download_cache', 'partial mirror cache has no approval binding');
     if (fs.existsSync(snapshotPath)) {

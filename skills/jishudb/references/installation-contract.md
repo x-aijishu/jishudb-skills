@@ -180,7 +180,14 @@ exact fields for:
 - publisher identity, Developer ID TeamIdentifier when applicable, and
   Gatekeeper or SmartScreen expectation.
 
-The helper prints the plan path, SHA-256, and a redacted approval envelope.
+The helper returns `status=plan_ready`, the plan path/SHA-256 and transaction
+details in the existing `approval` field. `authorization.status` remains
+`caller_verification_required`: the helper does not infer conversation consent
+or manufacture approval. The caller may use an existing user request that
+covers this exact setup scope; otherwise obtain one brief confirmation. A ready
+plan alone does not authorize installation. Keep the full technical envelope
+in tool evidence; show only a short action summary unless details are requested.
+The plan bytes, schemas, signatures and execute-time checks are unchanged.
 Plan mode selects a currently free port from the bounded Desktop set. Execution
 rechecks that exact port before product mutation, exclusively creates the
 current-user-only schema-1 `desktop-endpoint.json`, and launches Desktop only
@@ -235,7 +242,7 @@ under the old approval.
 
 ### macOS arm64
 
-After approval, run `download` repeatedly with the same plan path and digest.
+Once user authorization covers the transaction, run `download` repeatedly with the same plan path and digest.
 The first invocation fetches and validates the immutable release; continuations
 revalidate that private snapshot against the approved plan. Execute re-fetches
 the release before installation. The snapshot is published atomically only after validation,
@@ -305,7 +312,7 @@ The existing sanitized installer/Desktop launch environment remains unchanged.
 The helper does not read system/PAC proxy settings, change OS settings, or
 disable TLS verification.
 
-After approval, call `download` with the approved plan path and digest in separate
+Once user authorization covers the transaction, call `download` with the approved plan path and digest in separate
 host invocations (allow at least 120 seconds each). Each call requests at most
 16 MiB with a 20-second transfer deadline. Only an exact HTTP 206 Content-Range,
 identity encoding, and matching declared length permit saving bytes. A bounded

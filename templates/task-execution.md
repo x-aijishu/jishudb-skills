@@ -6,12 +6,17 @@ It does not grant account access, installation, publication, or new write scope.
 ## Required JishuDB setup precedes task work
 
 Missing host tools and an empty MCP configuration trigger the packaged
-installation and connection guide (`references/jishudb-setup/setup.md`
+routine setup guide (`references/jishudb-setup/references/setup-quickstart.md`
 relative to the calling task Skill), just as a failed connection
-does. Read it immediately; follow discovery, the installation contract, and
+does. Read it immediately; follow its single discovery pass and helper commands, then
 client/runtime verification. Do not wait for a callable MCP tool or ask the user
 to arrange setup independently. Reuse authorized scope and preserve required
-installation approval, OAuth, agreement, and OS user-presence gates.
+installation authorization, OAuth, agreement, and OS user-presence gates.
+Read-only discovery and planning need no extra confirmation. Reuse a user's
+explicit setup authorization for the matching transaction; ask only for missing
+or changed scope. Present a short action summary, not plan JSON/hash tables or
+an A/B prerequisite menu. Keep bounded download, verification and client setup
+moving until a real user action or a specific failure blocks the next step.
 
 Keep public research, source transfer, drafting, and rendering pending until
 required JishuDB readiness, destination, and write scope pass. Put this
