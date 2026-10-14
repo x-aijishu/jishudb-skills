@@ -608,14 +608,16 @@ async function assertPrivateAcl(target, directory, identity, tools) {
 
 async function setPrivateAcl(target, directory, identity, tools) {
   assertRegularPath(target, directory ? 'directory' : 'file', 'invalid_permissions');
+  // Preserve explicit owner access before removing inherited grants. Otherwise
+  // an intermediate failure can strand the new path with an empty DACL.
+  const grant = `*${identity.sid}:${directory ? '(OI)(CI)F' : 'F'}`;
+  await runNative(tools.icacls, [target, '/grant:r', grant], { label: 'set private ACL' });
   await runNative(tools.icacls, [target, '/inheritancelevel:r'], { label: 'disable ACL inheritance' });
   await runNative(
     tools.icacls,
     [target, '/remove:g', '*S-1-5-18', '*S-1-5-32-544'],
     { label: 'remove system and administrator ACL grants' },
   );
-  const grant = `*${identity.sid}:${directory ? '(OI)(CI)F' : 'F'}`;
-  await runNative(tools.icacls, [target, '/grant:r', grant], { label: 'set private ACL' });
   await runNative(tools.icacls, [target, '/setowner', `*${identity.sid}`], { label: 'set private owner' });
   await runNative(tools.icacls, [target, '/verify'], { label: 'verify private ACL' });
   await assertPrivateAcl(target, directory, identity, tools);
@@ -628,16 +630,42 @@ async function createPrivateDirectory(target, identity, tools) {
   await setPrivateAcl(resolved, true, identity, tools);
 }
 
+/** Remove only the still-pinned file created by this failed invocation. */
+function cleanupCreatedPrivateFile(target, created, failure) {
+  try {
+    assertNoReparseAncestors(target, 'failed private file');
+    const current = fs.lstatSync(target, { bigint: true });
+    if (!created || created.ino === 0n || !current.isFile() || current.isSymbolicLink()
+        || current.nlink !== 1n || current.dev !== created.dev || current.ino !== created.ino) {
+      fail('cleanup_identity_changed', 'failed private file was replaced or linked; inspect it before cleanup');
+    }
+    fs.unlinkSync(target);
+  } catch (error) {
+    if (error.code === 'ENOENT') return;
+    // Keep the original write/ACL failure; cleanup failure is separate evidence.
+    failure.cleanup = { path: target, status: 'manual_recovery_required',
+      errorCategory: error.category ?? error.code ?? 'cleanup_failed',
+      message: redactDiagnostic(error.message) };
+  }
+}
+
 async function writePrivateFileExclusive(target, content, identity, tools) {
   const descriptor = fs.openSync(target, 'wx', 0o600);
+  let created;
   try {
+    // Retain the handle through hardening and cleanup so its file ID cannot be
+    // recycled for an unrelated replacement at the same path.
+    created = fs.fstatSync(descriptor, { bigint: true });
     fs.writeFileSync(descriptor, content);
     fs.fsyncSync(descriptor);
+    await setPrivateAcl(target, false, identity, tools);
+    assertRegularPath(target, 'file');
+  } catch (error) {
+    cleanupCreatedPrivateFile(target, created, error);
+    throw error;
   } finally {
     fs.closeSync(descriptor);
   }
-  await setPrivateAcl(target, false, identity, tools);
-  assertRegularPath(target, 'file');
 }
 
 function sha256File(target) {
@@ -1997,6 +2025,7 @@ async function main(argv = process.argv.slice(2)) {
       errorCategory: known ? error.category : 'unexpected_failure',
       message: known ? error.publicMessage : 'installation helper failed; inspect the local diagnostic',
       ...(error?.installation ? { installation: error.installation } : {}),
+      ...(error?.cleanup ? { cleanup: error.cleanup } : {}),
     })}\n`);
     return 1;
   }

@@ -52,7 +52,7 @@ class SkillHubPackageTest(unittest.TestCase):
             self.assertEqual(first_artifact.read_bytes(), second_artifact.read_bytes())
 
             manifest = json.loads(Path(str(first["manifestPath"])).read_text(encoding="utf-8"))
-            self.assertEqual(manifest["version"], "0.1.23")
+            self.assertEqual(manifest["version"], "0.1.24")
             self.assertEqual(manifest["distribution"], "skillhub-compatible")
             self.assertEqual(
                 [entry["path"] for entry in manifest["files"]],

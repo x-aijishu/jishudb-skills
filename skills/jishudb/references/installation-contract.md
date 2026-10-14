@@ -343,6 +343,13 @@ Write the reviewed endpoint beside `data-location.json` as
 `desktop-endpoint.json` before launch. The Skill helper uses Node.js HTTPS,
 streaming SHA-256 validation, argument-array process launch, and Windows-native
 SID/ACL tools; PowerShell and its execution policy are not prerequisites.
+Private-file hardening grants the verified current user explicit access before
+removing inherited permissions. If creation or hardening fails, the helper
+removes only its own newly created file while retaining its file identity. It
+does not delete an existing or replaced lock. A separate `cleanup` result with
+`status: manual_recovery_required` reports cleanup failure without replacing
+the original error; inspect the named file and stop for authorized recovery.
+Never delete `release-floor.json` or clear the whole cache to recover a lock.
 Identity and ACL calls use asynchronous child-process pipes with a 30-second
 deadline and a combined 1 MiB output limit. Start failures preserve their OS
 cause; nonzero exits, timeouts, interrupted processes and excessive output remain
