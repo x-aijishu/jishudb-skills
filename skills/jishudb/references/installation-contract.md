@@ -21,8 +21,9 @@ ID, or endpoint-selection boundary.
 
 ## Explicit release source
 
-The default source for a new Windows plan is `github`. `plan -ReleaseSource cnb`
-selects the packaged CNB catalog discovery URL and independently embedded
+The default source for a new Windows or macOS plan is `cnb`. An omitted
+source selector uses CNB; `plan -ReleaseSource github` (Windows) or
+`plan --release-source github` (macOS) explicitly selects GitHub. CNB uses the packaged CNB catalog discovery URL and independently embedded
 Ed25519 authority in `scripts/release-mirror-trust.json`. The catalog verifier is
 `scripts/release-mirror-catalog.cjs`. All three files must travel together with
 the installer helper. No publication token or private key belongs in a Skill.

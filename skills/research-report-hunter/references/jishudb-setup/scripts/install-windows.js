@@ -172,7 +172,7 @@ function parseArguments(argv) {
   if (mode === 'check' && argv.length !== 1) fail('invalid_arguments', 'check mode accepts no additional arguments');
   return {
     mode,
-    releaseSource: values['-ReleaseSource'] ?? (['plan', 'check'].includes(mode) ? 'github' : null),
+    releaseSource: values['-ReleaseSource'] ?? (mode === 'plan' ? 'cnb' : null),
     planPath: values['-PlanPath'] ?? '',
     planSha256: values['-PlanSha256'] ?? '',
     client: values['-Client'] ?? '',
@@ -182,7 +182,7 @@ function parseArguments(argv) {
 }
 
 /** Validate the source selector without letting it override an approved plan. */
-function assertReleaseSourceAvailable(source = 'github') {
+function assertReleaseSourceAvailable(source = 'cnb') {
   if (source !== null && !['github', 'cnb'].includes(source)) fail('invalid_release_source', 'release source must be github or cnb');
   return source;
 }

@@ -15,7 +15,7 @@ compatibility: >-
   the user's local machine.
 metadata:
   author: jishudb
-  version: "0.1.22"
+  version: "0.1.23"
   openclaw:
     homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/jishudb
 ---
@@ -122,7 +122,8 @@ Use only the packaged helper for the current platform:
 - macOS arm64: `scripts/install-macos.zsh`
 - Windows x64: `scripts/install-windows.js`
 
-Release discovery defaults to GitHub with no automatic source fallback.
+Release discovery defaults to CNB with no automatic source fallback.
+Select GitHub explicitly only when requested or approved by the user.
 `-ReleaseSource` (Windows) and `--release-source` (macOS) accept `github` or
 `cnb` in plan/download/execute modes. CNB uses the packaged Ed25519 trust key
 and anonymous signed catalog; macOS CNB mode additionally requires Node.js 22+.

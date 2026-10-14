@@ -134,7 +134,7 @@ async function harness(t, options = {}) {
   const helper = context.module.exports;
   const environment = { identity: { sid: 'S-1-5-21-1-2-3-1001' }, localAppData, tempRoot: root, tools: { explorer: path.join(root, 'explorer.exe') } };
   return { ...f, helper, environment, context, root, calls, requests, launches, interactiveLaunches, setHandler: fn => { handler = fn; },
-    plan: () => helper.runPlan({ releaseSource: 'cnb', planPath: '', client: 'WorkBuddy', configTarget: path.join(root, 'client.json'), connectionName: 'jishudb' }, environment) };
+    plan: () => helper.runPlan(helper.parseArguments(['plan', '-Client', 'WorkBuddy', '-ConfigTarget', path.join(root, 'client.json'), '-ConnectionName', 'jishudb']), environment) };
 }
 
 function args(approval) { return { planPath: approval.planPath, planSha256: approval.planSha256 }; }

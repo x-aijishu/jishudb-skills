@@ -1,7 +1,7 @@
 # macOS CNB installation transport
 
-The canonical macOS helper supports an explicit CNB source for signed macOS
-arm64 releases. GitHub remains the default. CNB mode requires Node.js 22 or
+The canonical macOS helper defaults to CNB for signed macOS ARM64 releases.
+Use `--release-source github` to select GitHub explicitly. CNB requires Node.js 22 or
 newer for the bundled Ed25519 catalog verifier; GitHub mode retains its existing
 zsh/JXA requirements. The helper does not install Node automatically.
 

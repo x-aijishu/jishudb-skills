@@ -59,7 +59,7 @@ test('pure JavaScript helper parses only the reviewed command surface', () => {
     { ...helper.parseArguments(['plan', '-Client', 'WorkBuddy', '-ConfigTarget', 'C:\\config.json']) },
     {
       mode: 'plan',
-      releaseSource: 'github',
+      releaseSource: 'cnb',
       planPath: '',
       planSha256: '',
       client: 'WorkBuddy',

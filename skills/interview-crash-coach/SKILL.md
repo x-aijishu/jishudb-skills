@@ -14,7 +14,7 @@ compatibility: >-
 metadata:
   author: jishudb
   bundled-setup: jishudb
-  version: "0.1.13"
+  version: "0.1.14"
   openclaw:
     homepage: https://github.com/x-aijishu/jishudb-skills/tree/main/skills/interview-crash-coach
 ---

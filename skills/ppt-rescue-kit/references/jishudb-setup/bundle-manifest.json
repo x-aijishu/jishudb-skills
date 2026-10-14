@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "sourceSkill": "jishudb",
-  "sourceVersion": "0.1.22",
+  "sourceVersion": "0.1.23",
   "generator": "scripts/bundle-task-setup.py",
   "files": [
     {
       "path": "references/cnb-macos-installation.md",
-      "sha256": "e1de2dd154d5522f114c7c0aeab9840d5ef06aa22cd9eeb9c8254959825f25da",
+      "sha256": "4a3c08565fe38bca5951fb6ed8ff0a9d6abd98446c17b7f9cfb5d2dc29e7fad3",
       "mode": "644"
     },
     {
@@ -16,7 +16,7 @@
     },
     {
       "path": "references/installation-contract.md",
-      "sha256": "dfb9e8b562c8884ad0bc9a611a02968f796bfd5facee68e1ffa51b3ed56939d5",
+      "sha256": "dccbcfe9817a900a8419a4125397165613c599f8f1e536a97ac3d807afaebe76",
       "mode": "644"
     },
     {
@@ -26,12 +26,12 @@
     },
     {
       "path": "scripts/install-macos.sh",
-      "sha256": "a74cec84ce92d16a027f9d84f04002b94561a85953e99e55da055428af1d11cc",
+      "sha256": "9ae6f50125c38c9c1e1f9fa376fcd5d7d4d6e2ac047034a98efd8eb5d76d52f6",
       "mode": "755"
     },
     {
       "path": "scripts/install-windows.js",
-      "sha256": "34efc43e1b2ebbc093e68755fcb1fc12aca22d4a55fe18846dce618bde77de93",
+      "sha256": "91eece655ff51e04bd9ae7cb980b667dec268190b981f0b19755c58cf20fe967",
       "mode": "755"
     },
     {
@@ -46,7 +46,7 @@
     },
     {
       "path": "setup.md",
-      "sha256": "a4e605978da6d92993f2e551d02a0ade13751a5164cf8ac8b9bc89e59b401cf6",
+      "sha256": "1a80e825a505b3fc37c0b3503fb8e19eedf5d1e5057c263273515677f185c2a2",
       "mode": "644"
     },
     {

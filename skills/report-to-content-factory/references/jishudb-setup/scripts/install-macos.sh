@@ -30,7 +30,7 @@ CURRENT_STAGE="$MODE"
 TRANSACTION_LOCK=""
 PLAN_PATH=""
 PLAN_SHA256=""
-RELEASE_SOURCE="github"
+RELEASE_SOURCE="cnb"
 RELEASE_SOURCE_SPECIFIED=0
 CNB_NODE=""
 CNB_CONTEXT=""
@@ -1314,7 +1314,10 @@ assert_release_source_available() {
   esac
 }
 
-assert_release_source_available
+# Existing transactions resolve their approved source before requiring its tools.
+if [[ "$MODE" == "plan" ]] || (( RELEASE_SOURCE_SPECIFIED == 1 )); then
+  assert_release_source_available
+fi
 
 if [[ "$MODE" == "plan" ]]; then
   run_plan

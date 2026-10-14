@@ -14,7 +14,7 @@ const helper = module.exports;
 
 for (const mode of ['plan', 'download', 'execute']) {
   test(`Windows ${mode} parses source selection without implicit override`, () => {
-    assert.equal(helper.parseArguments([mode]).releaseSource, mode === 'plan' ? 'github' : null);
+    assert.equal(helper.parseArguments([mode]).releaseSource, mode === 'plan' ? 'cnb' : null);
     assert.equal(helper.parseArguments([mode, '-ReleaseSource', 'github']).releaseSource, 'github');
     assert.equal(helper.parseArguments([mode, '-ReleaseSource', 'cnb']).releaseSource, 'cnb');
   });
@@ -26,7 +26,7 @@ test('Windows rejects unknown and duplicate source options without fallback', ()
   }
   assert.throws(() => helper.parseArguments(['plan', '-ReleaseSource', 'cnb', '-ReleaseSource', 'github']), /duplicate/);
   assert.throws(() => helper.parseArguments(['check', '-ReleaseSource', 'cnb']), /not valid in check mode/);
-  assert.equal(helper.assertReleaseSourceAvailable(), 'github');
+  assert.equal(helper.assertReleaseSourceAvailable(), 'cnb');
 });
 
 test('direct Windows transaction entrypoints reject unknown source selectors', async () => {
@@ -35,10 +35,32 @@ test('direct Windows transaction entrypoints reject unknown source selectors', a
   }
 });
 
+test('macOS defaults new plans to CNB but defers existing transaction source checks', () => {
+  const initialSource = macos.match(/^RELEASE_SOURCE="([^"]+)"/m)?.[1];
+  const dispatch = macos.slice(macos.lastIndexOf('# Existing transactions resolve'));
+  assert.ok(dispatch.includes('run_download'));
+  for (const [mode, source, specified, expected] of [
+    ['plan', initialSource, 0, 'gate:cnb\nplan:cnb\n'],
+    ['plan', 'github', 1, 'gate:github\nplan:github\n'],
+    ['download', initialSource, 0, 'gate:github\ndownload:github\n'],
+    ['execute', initialSource, 0, 'gate:github\nexecute:github\n'],
+  ]) {
+    const script = `MODE="$1"; RELEASE_SOURCE="$2"; RELEASE_SOURCE_SPECIFIED="$3"
+assert_release_source_available() { printf 'gate:%s\\n' "$RELEASE_SOURCE"; }
+run_plan() { printf 'plan:%s\\n' "$RELEASE_SOURCE"; }
+run_download() { RELEASE_SOURCE=github; assert_release_source_available; printf 'download:%s\\n' "$RELEASE_SOURCE"; }
+run_execute() { RELEASE_SOURCE=github; assert_release_source_available; printf 'execute:%s\\n' "$RELEASE_SOURCE"; }
+${dispatch}`;
+    const result = spawnSync('bash', ['-c', script, 'source-dispatch', mode, source, String(specified)], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, expected);
+  }
+});
+
 test('macOS source gate requires complete CNB verification resources and rejects unknown values', () => {
   const gate = macos.match(/assert_release_source_available\(\) \{[\s\S]*?\n\}/)?.[0];
   assert.ok(gate);
-  assert.match(macos, /assert_release_source_available\n\nif \[\[ "\$MODE" == "plan"/);
+  assert.match(macos, /assert_release_source_available\nfi\n\nif \[\[ "\$MODE" == "plan"/);
   // This gate uses POSIX shell syntax. Run the exact function under bash on
   // Linux; the full zsh/JXA installer still requires real macOS acceptance.
   const scriptRoot = new URL('../skills/jishudb/scripts/', import.meta.url).pathname;
